@@ -50,16 +50,17 @@ Add to your WireGuard interface config (`/etc/wireguard/HomeLab.conf`):
 [Interface]
 # ...
 
-PostUp  = su -c 'vpnii-state up %i' - yourusername
-PreDown = su -c 'vpnii-state down %i' - yourusername
+PostUp  = su -c 'vpnii-state up %i' - $SUDO_USER
+PreDown = su -c 'vpnii-state down %i' - $SUDO_USER
 ```
 
 `%i` is replaced by wg-quick with the interface name.
 
-> **Why `su -c ... - yourusername`?**
+> **Why `su -c ... - $SUDO_USER`?**
 > wg-quick runs as root. Without `su`, state files are created as root and your
 > shell cannot delete them — the VPN indicator stays active even after the tunnel
-> goes down. Running via `su` ensures files are owned by your user.
+> goes down. `$SUDO_USER` is automatically set to the user who ran `sudo wg-quick up`,
+> so no hardcoded username is needed.
 
 ## `vpnii-state` CLI
 

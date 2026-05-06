@@ -9,8 +9,8 @@
 #   vpnii-state clear          clear all active tunnels
 #
 # wg-quick integration (run as user, not root):
-#   PostUp  = su -c 'vpnii-state up %i' - yourusername
-#   PreDown = su -c 'vpnii-state down %i' - yourusername
+#   PostUp  = su -c 'vpnii-state up %i' - $SUDO_USER
+#   PreDown = su -c 'vpnii-state down %i' - $SUDO_USER
 #
 # %i is replaced by wg-quick with the interface name.
 

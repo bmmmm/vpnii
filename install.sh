@@ -45,10 +45,10 @@ _green "✓ cache dir: $VPNII_CACHE_DIR"
 printf '\n'
 _bold "wg-quick integration"
 printf 'Add these lines to your WireGuard interface config ([Interface] section):\n\n'
-printf '  PostUp  = su -c '"'"'vpnii-state up %%i'"'"' - %s\n' "$USER"
-printf '  PreDown = su -c '"'"'vpnii-state down %%i'"'"' - %s\n' "$USER"
+printf '  PostUp  = su -c '"'"'vpnii-state up %%i'"'"' - $SUDO_USER\n'
+printf '  PreDown = su -c '"'"'vpnii-state down %%i'"'"' - $SUDO_USER\n'
 printf '\n'
-printf '%%i is replaced by wg-quick with the interface name (e.g. HomeLab).\n'
+printf '%%i = interface name (e.g. HomeLab). $SUDO_USER = the user who ran sudo wg-quick.\n'
 printf 'Running via su ensures state files are owned by your user, not root.\n'
 printf '\n'
 _green "Done. Open a new shell or: source $ZSHRC"
