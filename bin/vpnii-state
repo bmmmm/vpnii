@@ -1,33 +1,42 @@
 #!/usr/bin/env zsh
-# vpnii-state — manage VPN tunnel state files
+# vpnii-state — manage VPN tunnel state for vpnii
 #
 # Usage:
-#   vpnii-state up <tunnel>    mark tunnel as active
-#   vpnii-state down <tunnel>  mark tunnel as inactive
-#   vpnii-state list           list active tunnels
-#   vpnii-state clear          remove all active tunnels
+#   vpnii-state up <tunnel>    mark tunnel active
+#   vpnii-state down <tunnel>  mark tunnel inactive
+#   vpnii-state list           list active tunnels (one per line)
+#   vpnii-state status         human-readable status
+#   vpnii-state clear          clear all active tunnels
+#
+# wg-quick integration (run as user, not root):
+#   PostUp  = su -c 'vpnii-state up %i' - yourusername
+#   PreDown = su -c 'vpnii-state down %i' - yourusername
+#
+# %i is replaced by wg-quick with the interface name.
 
 set -euo pipefail
 
 VPNII_CACHE_DIR="${VPNII_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/vpnii}"
+VPNII_SYM_VPN="${VPNII_SYM_VPN:-⬡}"
 
+_die() { printf 'vpnii-state: %s\n' "$*" >&2; exit 1; }
 _usage() {
-  printf 'usage: vpnii-state up <tunnel> | down <tunnel> | list | clear\n' >&2
+  printf 'usage: vpnii-state up <tunnel> | down <tunnel> | list | status | clear\n' >&2
   exit 1
 }
 
-cmd="${1:-}"
-[[ -z "$cmd" ]] && _usage
+[[ $# -eq 0 ]] && _usage
+cmd="$1"; shift
 
 case "$cmd" in
   up)
-    [[ -z "${2:-}" ]] && _usage
+    [[ $# -eq 1 ]] || _die "up requires a tunnel name"
     mkdir -p "$VPNII_CACHE_DIR"
-    touch "${VPNII_CACHE_DIR}/${2}"
+    touch "${VPNII_CACHE_DIR}/${1}"
     ;;
   down)
-    [[ -z "${2:-}" ]] && _usage
-    rm -f "${VPNII_CACHE_DIR}/${2}"
+    [[ $# -eq 1 ]] || _die "down requires a tunnel name"
+    rm -f "${VPNII_CACHE_DIR}/${1}"
     ;;
   list)
     [[ -d "$VPNII_CACHE_DIR" ]] || exit 0
@@ -35,8 +44,20 @@ case "$cmd" in
       [[ -f "$f" ]] && printf '%s\n' "${f:t}"
     done
     ;;
+  status)
+    [[ -d "$VPNII_CACHE_DIR" ]] || { printf 'no active tunnels\n'; exit 0; }
+    tunnels=()
+    for f in "$VPNII_CACHE_DIR"/*(N); do
+      [[ -f "$f" ]] && tunnels+=("${f:t}")
+    done
+    if (( ${#tunnels} == 0 )); then
+      printf 'no active tunnels\n'
+    else
+      printf '%s %s\n' "$VPNII_SYM_VPN" "${(j:, :)tunnels}"
+    fi
+    ;;
   clear)
-    [[ -d "$VPNII_CACHE_DIR" ]] && rm -f "${VPNII_CACHE_DIR}"/*
+    [[ -d "$VPNII_CACHE_DIR" ]] && rm -f "${VPNII_CACHE_DIR}/"*(N)
     ;;
   *)
     _usage

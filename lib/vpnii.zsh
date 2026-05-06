@@ -1,28 +1,38 @@
 #!/usr/bin/env zsh
-# vpnii core — precmd hook that appends VPN segment to RPROMPT
+# vpnii core — precmd hook + public API
 #
-# State file: $VPNII_CACHE_DIR/<tunnel-name>  (presence = active)
-# Multiple tunnels supported: one file per active tunnel.
-#
-# wg-quick PostUp:  mkdir -p "$VPNII_CACHE_DIR" && touch "$VPNII_CACHE_DIR/<name>"
-# wg-quick PreDown: rm -f "$VPNII_CACHE_DIR/<name>"
+# State protocol (presence-based):
+#   Active tunnel:   $VPNII_CACHE_DIR/<TunnelName>  exists
+#   Inactive tunnel: file absent
+#   Multiple tunnels: multiple files, one per tunnel
 
 : "${VPNII_CACHE_DIR:=${XDG_CACHE_HOME:-$HOME/.cache}/vpnii}"
 : "${VPNII_SYM_VPN:=⬡}"
 : "${VPNII_CLR_ACTIVE:=%F{green}}"
 : "${VPNII_CLR_RESET:=%f}"
 
-function _vpnii_precmd {
-  [[ -d "$VPNII_CACHE_DIR" ]] || return
+# vpnii_active_tunnels — print active tunnel names, one per line
+# Returns 1 if no tunnels active
+function vpnii_active_tunnels {
+  [[ -d "$VPNII_CACHE_DIR" ]] || return 1
+  local found=0 f
+  for f in "$VPNII_CACHE_DIR"/*(N); do
+    [[ -f "$f" ]] || continue
+    printf '%s\n' "${f:t}"
+    found=1
+  done
+  (( found ))
+}
 
-  local tunnels=()
-  local f
+function _vpnii_precmd {
+  [[ "${VPNII_ENABLED:-1}" == "0" ]] && return
+  local tunnels=() f
+  [[ -d "$VPNII_CACHE_DIR" ]] || return
   for f in "$VPNII_CACHE_DIR"/*(N); do
     [[ -f "$f" ]] && tunnels+=("${f:t}")
   done
   (( ${#tunnels} == 0 )) && return
-
-  local label="${(j:,:)tunnels}"
+  local label="${(j:, :)tunnels}"
   RPROMPT="${RPROMPT:+${RPROMPT} }${VPNII_CLR_ACTIVE}${VPNII_SYM_VPN} ${label}${VPNII_CLR_RESET}"
 }
 

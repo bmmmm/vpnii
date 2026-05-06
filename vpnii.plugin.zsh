@@ -1,12 +1,15 @@
 #!/usr/bin/env zsh
 # vpnii — VPN status indicator for zsh RPROMPT
-# oh-my-zsh plugin entry point. Source directly for standalone use.
 #
-# State file: written by wg-quick PostUp/PreDown (or bin/vpnii-state)
-# No sudo, no network calls, no external dependencies.
+# oh-my-zsh plugin:  clone to $ZSH_CUSTOM/plugins/vpnii, add "vpnii" to plugins=()
+# Standalone:        source this file from ~/.zshrc
+#
+# Configuration (set before sourcing):
+#   VPNII_CACHE_DIR    state file directory  (default: ~/.cache/vpnii)
+#   VPNII_SYM_VPN      indicator symbol      (default: ⬡)
+#   VPNII_CLR_ACTIVE   zsh prompt color      (default: %F{green})
+#   VPNII_CLR_RESET    zsh prompt reset      (default: %f)
+#   VPNII_ENABLED      set to "0" to disable (default: enabled)
 
 export VPNII_HOME="${VPNII_HOME:-${0:A:h}}"
-export VPNII_CACHE_DIR="${VPNII_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/vpnii}"
-
-source "${VPNII_HOME}/lib/visual.zsh"
 source "${VPNII_HOME}/lib/vpnii.zsh"
