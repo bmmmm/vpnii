@@ -26,8 +26,9 @@ vpnii_state="${0:A:h}/vpnii-state"
 printf 'vpnii-wg-setup: %s\n' "$config"
 _info "vpnii-state: $vpnii_state"
 
-# Already migrated with correct syntax?
-if grep -qE "^PostUp.*sudo -u.*vpnii-state up" "$config" 2>/dev/null; then
+# Already migrated with correct tunnel name?
+tunnel_name="${config:t:r}"
+if grep -qE "^PostUp.*sudo -u.*vpnii-state up ${tunnel_name}" "$config" 2>/dev/null; then
   _ok "already migrated — nothing to do"
   exit 0
 fi
@@ -58,6 +59,12 @@ STRIP_POSTUP_SU = re.compile(
     r"\s*&&\s*su\s+-c\s+'vpnii-state[^']*'\s+-\s+\S+"
 )
 
+# Strip previous correct-but-wrong-name pattern (used %i → utun9 instead of config name):
+#   && sudo -u $SUDO_USER /path/vpnii-state up utun\d+
+STRIP_POSTUP_UTUN = re.compile(
+    r"\s*&&\s*sudo\s+-u\s+\S+\s+\S+vpnii-state\s+\S+\s+utun\d+"
+)
+
 # Strip old claudii/vpnii path from PreDown args:
 #   /path/.cache/claudii/vpnii
 STRIP_PREDOWN_CLAUDII = re.compile(r'\s+\S+/\.cache\S*/vpnii\b')
@@ -67,8 +74,17 @@ STRIP_PREDOWN_SU = re.compile(
     r"\s*&&\s*su\s+-c\s+'vpnii-state[^']*'\s+-\s+\S+"
 )
 
-NEW_POSTUP  = f" && sudo -u $SUDO_USER {vpnii_bin} up %i"
-NEW_PREDOWN = f" && sudo -u $SUDO_USER {vpnii_bin} down %i"
+# Strip previous correct-but-wrong-name pattern from PreDown (utun device name):
+STRIP_PREDOWN_UTUN = re.compile(
+    r"\s*&&\s*sudo\s+-u\s+\S+\s+\S+vpnii-state\s+\S+\s+utun\d+"
+)
+
+# Use config filename as tunnel name — on macOS, %i gives the utun
+# device name (e.g. utun9), not the friendly config name (e.g. HomeLab)
+import os
+tunnel_name = os.path.splitext(os.path.basename(src))[0]
+NEW_POSTUP  = f" && sudo -u $SUDO_USER {vpnii_bin} up {tunnel_name}"
+NEW_PREDOWN = f" && sudo -u $SUDO_USER {vpnii_bin} down {tunnel_name}"
 
 with open(src) as f:
     lines = f.readlines()
@@ -80,6 +96,7 @@ for line in lines:
         patched = line.rstrip('\n')
         patched = STRIP_POSTUP_CLAUDII.sub('', patched)
         patched = STRIP_POSTUP_SU.sub('', patched)
+        patched = STRIP_POSTUP_UTUN.sub('', patched)
         if 'vpnii-state' not in patched:
             patched += NEW_POSTUP
         out.append(patched + '\n')
@@ -88,6 +105,7 @@ for line in lines:
         patched = line.rstrip('\n')
         patched = STRIP_PREDOWN_CLAUDII.sub('', patched)
         patched = STRIP_PREDOWN_SU.sub('', patched)
+        patched = STRIP_PREDOWN_UTUN.sub('', patched)
         if 'vpnii-state' not in patched:
             patched += NEW_PREDOWN
         out.append(patched + '\n')
