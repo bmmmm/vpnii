@@ -1,0 +1,44 @@
+#!/usr/bin/env zsh
+# vpnii-state — manage VPN tunnel state files
+#
+# Usage:
+#   vpnii-state up <tunnel>    mark tunnel as active
+#   vpnii-state down <tunnel>  mark tunnel as inactive
+#   vpnii-state list           list active tunnels
+#   vpnii-state clear          remove all active tunnels
+
+set -euo pipefail
+
+VPNII_CACHE_DIR="${VPNII_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/vpnii}"
+
+_usage() {
+  printf 'usage: vpnii-state up <tunnel> | down <tunnel> | list | clear\n' >&2
+  exit 1
+}
+
+cmd="${1:-}"
+[[ -z "$cmd" ]] && _usage
+
+case "$cmd" in
+  up)
+    [[ -z "${2:-}" ]] && _usage
+    mkdir -p "$VPNII_CACHE_DIR"
+    touch "${VPNII_CACHE_DIR}/${2}"
+    ;;
+  down)
+    [[ -z "${2:-}" ]] && _usage
+    rm -f "${VPNII_CACHE_DIR}/${2}"
+    ;;
+  list)
+    [[ -d "$VPNII_CACHE_DIR" ]] || exit 0
+    for f in "$VPNII_CACHE_DIR"/*(N); do
+      [[ -f "$f" ]] && printf '%s\n' "${f:t}"
+    done
+    ;;
+  clear)
+    [[ -d "$VPNII_CACHE_DIR" ]] && rm -f "${VPNII_CACHE_DIR}"/*
+    ;;
+  *)
+    _usage
+    ;;
+esac
