@@ -4,7 +4,7 @@
 # Edits ONLY PostUp/PreDown lines. Never reads or displays secret values.
 # Creates a .bak backup before modifying.
 #
-# Usage: vpnii-wg-setup <config.conf>
+# Usage: sudo vpnii-wg-setup <config.conf>
 # Example: sudo vpnii-wg-setup /etc/wireguard/HomeLab.conf
 
 set -euo pipefail
@@ -13,16 +13,21 @@ _die()  { printf 'vpnii-wg-setup: %s\n' "$*" >&2; exit 1; }
 _info() { printf '  → %s\n' "$*"; }
 _ok()   { printf '  ✓ %s\n' "$*"; }
 
-[[ $# -eq 1 ]] || _die "usage: vpnii-wg-setup <wireguard-config.conf>"
+[[ $# -eq 1 ]] || _die "usage: sudo vpnii-wg-setup <wireguard-config.conf>"
 config="$1"
 [[ -f "$config" ]] || _die "not found: $config"
 [[ -r "$config" ]] || _die "not readable: $config (try sudo)"
 [[ -w "$config" ]] || _die "not writable: $config (try sudo)"
 
-printf 'vpnii-wg-setup: %s\n' "$config"
+# Absolute path to vpnii-state — wg-quick runs with minimal PATH
+vpnii_state="${0:A:h}/vpnii-state"
+[[ -x "$vpnii_state" ]] || _die "vpnii-state not found at: $vpnii_state"
 
-# Already migrated?
-if grep -qE '^PostUp.*vpnii-state up' "$config" 2>/dev/null; then
+printf 'vpnii-wg-setup: %s\n' "$config"
+_info "vpnii-state: $vpnii_state"
+
+# Already migrated with correct syntax?
+if grep -qE "^PostUp.*sudo -u.*vpnii-state up" "$config" 2>/dev/null; then
   _ok "already migrated — nothing to do"
   exit 0
 fi
@@ -36,23 +41,34 @@ _info "backup: $backup"
 tmpfile=$(mktemp)
 trap 'rm -f "$tmpfile"' EXIT
 
-python3 - "$config" "$tmpfile" <<'PYEOF'
+python3 - "$config" "$tmpfile" "$vpnii_state" <<'PYEOF'
 import sys, re
 
-src, dst = sys.argv[1], sys.argv[2]
+src, dst, vpnii_bin = sys.argv[1], sys.argv[2], sys.argv[3]
 
 # Strip old claudii/vpnii state patterns from PostUp:
-#   && mkdir -p /some/.cache/claudii && echo "Name" > /some/.cache/claudii/vpnii
-STRIP_POSTUP = re.compile(
+#   && mkdir -p /path/.cache/claudii && echo "Name" > /path/.cache/claudii/vpnii
+STRIP_POSTUP_CLAUDII = re.compile(
     r'\s*&&\s*mkdir\s+-p\s+\S*\.cache\S*\s*&&\s*echo\s+"[^"]*"\s*>\s*\S*/vpnii'
 )
 
-# Strip old claudii/vpnii path from PreDown args:
-#   /some/path/.cache/claudii/vpnii
-STRIP_PREDOWN = re.compile(r'\s+\S+/\.cache\S*/vpnii\b')
+# Strip wrong su -c pattern (first migration attempt, macOS-incompatible):
+#   && su -c 'vpnii-state ...' - $SUDO_USER
+STRIP_POSTUP_SU = re.compile(
+    r"\s*&&\s*su\s+-c\s+'vpnii-state[^']*'\s+-\s+\S+"
+)
 
-NEW_POSTUP  = " && sudo -u $SUDO_USER vpnii-state up %i"
-NEW_PREDOWN = " && sudo -u $SUDO_USER vpnii-state down %i"
+# Strip old claudii/vpnii path from PreDown args:
+#   /path/.cache/claudii/vpnii
+STRIP_PREDOWN_CLAUDII = re.compile(r'\s+\S+/\.cache\S*/vpnii\b')
+
+# Strip wrong su -c pattern from PreDown:
+STRIP_PREDOWN_SU = re.compile(
+    r"\s*&&\s*su\s+-c\s+'vpnii-state[^']*'\s+-\s+\S+"
+)
+
+NEW_POSTUP  = f" && sudo -u $SUDO_USER {vpnii_bin} up %i"
+NEW_PREDOWN = f" && sudo -u $SUDO_USER {vpnii_bin} down %i"
 
 with open(src) as f:
     lines = f.readlines()
@@ -61,13 +77,17 @@ out = []
 changed_postup = changed_predown = False
 for line in lines:
     if re.match(r'^PostUp\s*=', line):
-        patched = STRIP_POSTUP.sub('', line.rstrip('\n'))
+        patched = line.rstrip('\n')
+        patched = STRIP_POSTUP_CLAUDII.sub('', patched)
+        patched = STRIP_POSTUP_SU.sub('', patched)
         if 'vpnii-state' not in patched:
             patched += NEW_POSTUP
         out.append(patched + '\n')
         changed_postup = True
     elif re.match(r'^PreDown\s*=', line):
-        patched = STRIP_PREDOWN.sub('', line.rstrip('\n'))
+        patched = line.rstrip('\n')
+        patched = STRIP_PREDOWN_CLAUDII.sub('', patched)
+        patched = STRIP_PREDOWN_SU.sub('', patched)
         if 'vpnii-state' not in patched:
             patched += NEW_PREDOWN
         out.append(patched + '\n')
@@ -89,16 +109,13 @@ with open(dst, 'w') as f:
     f.writelines(out)
 PYEOF
 
-# Verify
-if ! grep -qE '^PostUp.*vpnii-state' "$tmpfile"; then
+# Verify correct form
+if ! grep -qE "^PostUp.*sudo -u.*vpnii-state" "$tmpfile"; then
   cp "$backup" "$config"
   _die "patch failed — restored backup"
 fi
 
-# Apply
 cp "$tmpfile" "$config"
-
-# Show only PostUp/PreDown (no secrets)
 _ok "PostUp updated"
 _ok "PreDown updated"
 printf '\nResult:\n'
