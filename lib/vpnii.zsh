@@ -8,8 +8,8 @@
 
 : "${VPNII_CACHE_DIR:=${XDG_CACHE_HOME:-$HOME/.cache}/vpnii}"
 : "${VPNII_SYM_VPN:=⬡}"
-: "${VPNII_CLR_ACTIVE:=%F{green}}"
-: "${VPNII_CLR_RESET:=%f}"
+(( ${+VPNII_CLR_ACTIVE} )) || VPNII_CLR_ACTIVE='%F{green}'
+(( ${+VPNII_CLR_RESET} ))  || VPNII_CLR_RESET='%f'
 
 # vpnii_active_tunnels — print active tunnel names, one per line
 # Returns 1 if no tunnels active
