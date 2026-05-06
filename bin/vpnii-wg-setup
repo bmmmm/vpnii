@@ -1,0 +1,106 @@
+#!/usr/bin/env zsh
+# vpnii-wg-setup — patch a WireGuard config to use vpnii-state
+#
+# Edits ONLY PostUp/PreDown lines. Never reads or displays secret values.
+# Creates a .bak backup before modifying.
+#
+# Usage: vpnii-wg-setup <config.conf>
+# Example: sudo vpnii-wg-setup /etc/wireguard/HomeLab.conf
+
+set -euo pipefail
+
+_die()  { printf 'vpnii-wg-setup: %s\n' "$*" >&2; exit 1; }
+_info() { printf '  → %s\n' "$*"; }
+_ok()   { printf '  ✓ %s\n' "$*"; }
+
+[[ $# -eq 1 ]] || _die "usage: vpnii-wg-setup <wireguard-config.conf>"
+config="$1"
+[[ -f "$config" ]] || _die "not found: $config"
+[[ -r "$config" ]] || _die "not readable: $config (try sudo)"
+[[ -w "$config" ]] || _die "not writable: $config (try sudo)"
+
+printf 'vpnii-wg-setup: %s\n' "$config"
+
+# Already migrated?
+if grep -qE '^PostUp.*vpnii-state up' "$config" 2>/dev/null; then
+  _ok "already migrated — nothing to do"
+  exit 0
+fi
+
+# Backup
+backup="${config}.vpnii-bak"
+cp "$config" "$backup"
+_info "backup: $backup"
+
+# Patch via Python (reliable multi-pattern replacement, macOS sed compat)
+tmpfile=$(mktemp)
+trap 'rm -f "$tmpfile"' EXIT
+
+python3 - "$config" "$tmpfile" <<'PYEOF'
+import sys, re
+
+src, dst = sys.argv[1], sys.argv[2]
+
+# Strip old claudii/vpnii state patterns from PostUp:
+#   && mkdir -p /some/.cache/claudii && echo "Name" > /some/.cache/claudii/vpnii
+STRIP_POSTUP = re.compile(
+    r'\s*&&\s*mkdir\s+-p\s+\S*\.cache\S*\s*&&\s*echo\s+"[^"]*"\s*>\s*\S*/vpnii'
+)
+
+# Strip old claudii/vpnii path from PreDown args:
+#   /some/path/.cache/claudii/vpnii
+STRIP_PREDOWN = re.compile(r'\s+\S+/\.cache\S*/vpnii\b')
+
+NEW_POSTUP  = " && su -c 'vpnii-state up %i' - $SUDO_USER"
+NEW_PREDOWN = " && su -c 'vpnii-state down %i' - $SUDO_USER"
+
+with open(src) as f:
+    lines = f.readlines()
+
+out = []
+changed_postup = changed_predown = False
+for line in lines:
+    if re.match(r'^PostUp\s*=', line):
+        patched = STRIP_POSTUP.sub('', line.rstrip('\n'))
+        if 'vpnii-state' not in patched:
+            patched += NEW_POSTUP
+        out.append(patched + '\n')
+        changed_postup = True
+    elif re.match(r'^PreDown\s*=', line):
+        patched = STRIP_PREDOWN.sub('', line.rstrip('\n'))
+        if 'vpnii-state' not in patched:
+            patched += NEW_PREDOWN
+        out.append(patched + '\n')
+        changed_predown = True
+    else:
+        out.append(line)
+
+if not (changed_postup or changed_predown):
+    print("WARN: no PostUp/PreDown found — adding after [Interface]", file=sys.stderr)
+    iface_idx = next((i for i, l in enumerate(out) if l.strip() == '[Interface]'), None)
+    if iface_idx is not None:
+        insert_at = iface_idx + 1
+        while insert_at < len(out) and out[insert_at].strip() and not out[insert_at].startswith('['):
+            insert_at += 1
+        out.insert(insert_at, NEW_PREDOWN.lstrip(' &&') + '\n')
+        out.insert(insert_at, NEW_POSTUP.lstrip(' &&') + '\n')
+
+with open(dst, 'w') as f:
+    f.writelines(out)
+PYEOF
+
+# Verify
+if ! grep -qE '^PostUp.*vpnii-state' "$tmpfile"; then
+  cp "$backup" "$config"
+  _die "patch failed — restored backup"
+fi
+
+# Apply
+cp "$tmpfile" "$config"
+
+# Show only PostUp/PreDown (no secrets)
+_ok "PostUp updated"
+_ok "PreDown updated"
+printf '\nResult:\n'
+grep -E '^(PostUp|PreDown)' "$config"
+printf '\nRun: sudo wg-quick down <tunnel> && sudo wg-quick up <tunnel>\n'
