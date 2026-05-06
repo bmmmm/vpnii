@@ -8,11 +8,12 @@
 #   vpnii-state status         human-readable status
 #   vpnii-state clear          clear all active tunnels
 #
-# wg-quick integration (run as user, not root):
-#   PostUp  = su -c 'vpnii-state up %i' - $SUDO_USER
-#   PreDown = su -c 'vpnii-state down %i' - $SUDO_USER
+# wg-quick integration (macOS — sudo -u from root context, no password needed):
+#   PostUp  = sudo -u $SUDO_USER vpnii-state up %i
+#   PreDown = sudo -u $SUDO_USER vpnii-state down %i
 #
 # %i is replaced by wg-quick with the interface name.
+# vpnii-state must be in sudo's secure PATH — run install.sh first.
 
 set -euo pipefail
 

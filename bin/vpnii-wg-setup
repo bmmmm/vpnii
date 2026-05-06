@@ -51,8 +51,8 @@ STRIP_POSTUP = re.compile(
 #   /some/path/.cache/claudii/vpnii
 STRIP_PREDOWN = re.compile(r'\s+\S+/\.cache\S*/vpnii\b')
 
-NEW_POSTUP  = " && su -c 'vpnii-state up %i' - $SUDO_USER"
-NEW_PREDOWN = " && su -c 'vpnii-state down %i' - $SUDO_USER"
+NEW_POSTUP  = " && sudo -u $SUDO_USER vpnii-state up %i"
+NEW_PREDOWN = " && sudo -u $SUDO_USER vpnii-state down %i"
 
 with open(src) as f:
     lines = f.readlines()
