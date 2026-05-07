@@ -27,6 +27,33 @@
 (( ${+VPNII_CLR_RESET} ))       || VPNII_CLR_RESET='%f'
 (( ${+VPNII_TS_CLR_INACTIVE} )) || VPNII_TS_CLR_INACTIVE='%F{8}'
 
+# Echoes the latest-handshake age in seconds for a wg-quick tunnel, or
+# returns non-zero if unavailable (tunnel down, sudo needed, no peers
+# handshaked yet). `wg show <name> latest-handshakes` outputs one
+# "<peer>\t<unix-ts>" line per peer; we pick the max timestamp.
+function _vpnii_handshake_age {
+  local name="$1" out peer ts latest=0
+  out=$(wg show "$name" latest-handshakes 2>/dev/null) || return 1
+  [[ -z "$out" ]] && return 1
+  while IFS=$'\t' read -r peer ts; do
+    [[ -n "$ts" ]] && (( ts > latest )) && latest=$ts
+  done <<< "$out"
+  (( latest == 0 )) && return 1
+  print -- $(( $(date +%s) - latest ))
+}
+
+# Formats a duration in seconds as "Xs", "Xm Ys", or "Xh Ym".
+function _vpnii_format_age {
+  local secs="$1"
+  if (( secs < 60 )); then
+    print -- "${secs}s"
+  elif (( secs < 3600 )); then
+    print -- "$((secs/60))m $((secs%60))s"
+  else
+    print -- "$((secs/3600))h $((secs%3600/60))m"
+  fi
+}
+
 # Returns 0 if any local interface holds an IP in the Tailscale CGNAT range
 # (100.64.0.0/10 → second octet 64..127).
 function _vpnii_tailscale_active {

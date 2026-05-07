@@ -9,7 +9,22 @@ _cmd_diag() {
   _hdr "Active tunnels"
   local found=0 f
   for f in "${VPNII_WG_DIR}"/*.name(N.); do
-    _ok "wg-quick: ${f:t:r}  (${f})"
+    local tname="${f:t:r}"
+    _ok "wg-quick: ${tname}  (${f})"
+    # Handshake age — green <3m, yellow 3-10m, red >10m or unavailable.
+    # When wg show needs sudo (tunnel sock owned by root), we skip with
+    # a quiet hint rather than spam every diag run.
+    local age
+    if age=$(_vpnii_handshake_age "$tname"); then
+      local pretty
+      pretty=$(_vpnii_format_age "$age")
+      if   (( age < 180  )); then _ok   "      handshake: $pretty ago"
+      elif (( age < 600  )); then _warn "      handshake: $pretty ago  (stale-ish)"
+      else                        _err  "      handshake: $pretty ago  (likely dead)"
+      fi
+    else
+      printf '      handshake: unavailable  (sudo wg show %s for details)\n' "$tname"
+    fi
     found=1
   done
   if [[ -d "$VPNII_CACHE_DIR" ]]; then
