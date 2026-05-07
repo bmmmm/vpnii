@@ -37,6 +37,7 @@ source "${VPNII_HOME}/lib/ui.zsh"
 source "${VPNII_HOME}/lib/strip.zsh"
 source "${VPNII_HOME}/lib/cmd-tunnel.zsh"
 source "${VPNII_HOME}/lib/cmd-tailscale.zsh"
+source "${VPNII_HOME}/lib/cmd-toggle.zsh"
 source "${VPNII_HOME}/lib/cmd-ip.zsh"
 source "${VPNII_HOME}/lib/cmd-diag.zsh"
 source "${VPNII_HOME}/lib/cmd-setup.zsh"
@@ -57,6 +58,8 @@ Tunnel state:
                        than one is configured (else prompts).
   down [<tunnel>]      bring down. With no arg: picks from active tunnels (incl.
                        tailscale when up). 'tailscale' runs 'tailscale down'.
+  toggle <tunnel>      flip state: up if down, down if up
+  reconnect <tunnel>   down + up in one step (fixes stale handshakes / DERP)
   list                 list active tunnels — one per line (excludes tailscale)
   status               human-readable: "⬡ HomeLab  ⬢ ts" / "⊖ off"
   ip [-4 | -6]         show current external IP (sanity check after up/down)
@@ -84,6 +87,8 @@ cmd="$1"; shift
 case "$cmd" in
   up)             _cmd_up "$@" ;;
   down)           _cmd_down "$@" ;;
+  toggle)         _cmd_toggle "$@" ;;
+  reconnect)      _cmd_reconnect "$@" ;;
   list)           _cmd_list ;;
   status)         _cmd_status ;;
   ip)             _cmd_ip "$@" ;;

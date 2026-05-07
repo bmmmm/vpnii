@@ -8,6 +8,8 @@ _vpnii() {
   subcmds=(
     'up:bring tunnel up (or pick interactively)'
     'down:bring tunnel down (or pick from active)'
+    'toggle:flip tunnel state (up/down)'
+    'reconnect:down + up (fix stale handshake / DERP)'
     'list:list active tunnels'
     'status:human-readable status line'
     'ip:show current external IP'
@@ -26,7 +28,7 @@ _vpnii() {
 
   local cmd="${words[2]}"
   case "$cmd" in
-    up)
+    up|toggle|reconnect)
       local -a names
       # wg-quick configs
       local conf
