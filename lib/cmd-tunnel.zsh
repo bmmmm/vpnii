@@ -1,0 +1,106 @@
+#!/usr/bin/env zsh
+# Tunnel state commands — up, down, list, status, clear.
+#
+# up/down route through wg-quick when a /etc/wireguard/<name>.conf exists,
+# falling back to manual cache markers (under VPNII_CACHE_DIR) for VPN
+# clients that aren't wg-quick (Passepartout, IKEv2, etc.).
+
+_cmd_up() {
+  local name=""
+  if (( $# == 0 )); then
+    if [[ -d /etc/wireguard && ! -r /etc/wireguard ]]; then
+      _die "/etc/wireguard isn't readable as $USER  (run: sudo chown $USER /etc/wireguard)"
+    fi
+    local configs=( /etc/wireguard/*.conf(N.) )
+    local -a names=()
+    local c
+    for c in "${configs[@]}"; do names+=("${c:t:r}"); done
+    if (( ${#names} == 0 )); then
+      _die "no wg-quick configs in /etc/wireguard  (run: vpnii setup)"
+    fi
+    _pick_one "Available tunnels" "${names[@]}" || _die "aborted"
+    name="$REPLY"
+  else
+    [[ $# -eq 1 ]] || _die "up takes at most one tunnel name"
+    name="$1"
+  fi
+  _validate_name "$name"
+  local conf="/etc/wireguard/${name}.conf"
+
+  # If a wg-quick config exists, this is a wg-quick tunnel — bring it up.
+  if [[ -f "$conf" ]]; then
+    if [[ -f "${VPNII_WG_DIR}/${name}.name" ]]; then
+      _info "$name is already up"
+      return 0
+    fi
+    command -v wg-quick &>/dev/null || _die "wg-quick not found  (install with: brew install wireguard-tools)"
+    _info "sudo wg-quick up $name"
+    sudo wg-quick up "$name"
+    printf '\n'
+    _ok "tunnel up: $name"
+    return
+  fi
+
+  # Otherwise: manual cache state for non-wg-quick VPN clients.
+  mkdir -p "$VPNII_CACHE_DIR"
+  touch "${VPNII_CACHE_DIR}/${name}"
+  _ok "marked active in cache: $name"
+}
+
+_cmd_down() {
+  local name=""
+  if (( $# == 0 )); then
+    local -a active=( ${(f)"$(vpnii_active_tunnels 2>/dev/null)"} )
+    if (( ${#active} == 0 )); then
+      _info "no active tunnels"
+      return 0
+    fi
+    _pick_one "Active tunnels" "${active[@]}" || _die "aborted"
+    name="$REPLY"
+  else
+    [[ $# -eq 1 ]] || _die "down takes at most one tunnel name"
+    name="$1"
+  fi
+  _validate_name "$name"
+  local cache_file="${VPNII_CACHE_DIR}/${name}"
+  local wg_marker="${VPNII_WG_DIR}/${name}.name"
+  local conf="/etc/wireguard/${name}.conf"
+
+  # If wg-quick manages it (active or known config), tear it down via wg-quick.
+  if [[ -f "$wg_marker" || -f "$conf" ]]; then
+    command -v wg-quick &>/dev/null || _die "wg-quick not found  (install with: brew install wireguard-tools)"
+    _info "sudo wg-quick down $name"
+    sudo wg-quick down "$name"
+    printf '\n'
+    _ok "tunnel down: $name"
+    return
+  fi
+
+  # Manual cache: remove if present, otherwise idempotent no-op.
+  if [[ -f "$cache_file" ]]; then
+    rm -f "$cache_file"
+    _ok "cleared cache: $name"
+  fi
+}
+
+_cmd_list() {
+  vpnii_active_tunnels || true
+}
+
+_cmd_status() {
+  _vpnii_collect_tunnels
+  if (( ${#reply} == 0 )); then
+    printf 'no active tunnels\n'
+  else
+    printf '%s %s\n' "$VPNII_SYM_VPN" "${(j:, :)reply}"
+  fi
+}
+
+_cmd_clear() {
+  if [[ -d "$VPNII_CACHE_DIR" ]]; then
+    rm -f "${VPNII_CACHE_DIR}/"*(N.)
+    # Older versions wrote .vpnii-bak files containing full config values
+    # under backups/ — wipe any leftover so private keys don't linger.
+    rm -rf "${VPNII_CACHE_DIR}/backups"
+  fi
+}
