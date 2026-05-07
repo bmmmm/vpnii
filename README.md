@@ -160,19 +160,23 @@ contexts (`install.sh`, scripts).
 ### First-time wizard
 
 When `/etc/wireguard` is empty or missing, `vpnii setup` (no args) starts a
-wizard. It checks `wg`/`wg-quick` are installed (with a `brew install
-wireguard-tools` hint if not), then asks for a path to an existing wg
-config. **Import is the default path** — most people arrive at vpnii
-already holding a config from a VPN provider, a server admin, or another
-machine. The path is fed into `vpnii install`, which lands it in
-`/etc/wireguard/<name>.conf` with the right ownership.
+wizard. It first verifies `wg`/`wg-quick` are installed (with a `brew install
+wireguard-tools` hint if not), then offers three paths:
 
-If you leave the path blank, the wizard falls back to **generate mode**:
-prompts for tunnel name, your VPN address, the server's public key,
-endpoint, allowed IPs and optional DNS, then runs `wg genkey | wg pubkey`,
-writes the result to `~/wg/<name>.conf`, and prints your generated public
-key (which you'll need to share with the server side). It then offers to
-install the new config.
+1. **Path to a config file** — most common, when you got a `.conf` from a
+   VPN provider, a server admin, or a backup. Fed straight into `vpnii install`.
+2. **Paste the config inline** — for configs that arrived through email or
+   chat. Asked only for a tunnel name, then accepts pasted content until
+   `EOF` or Ctrl+D. The target file `~/wg/<name>.conf` is created with
+   mode `0600` *before* the first byte is appended, so a partial paste
+   never sits at default permissions on disk.
+3. **Generate fresh** — prompts for tunnel name, VPN address, server's
+   public key, endpoint, allowed IPs and optional DNS, then runs
+   `wg genkey | wg pubkey`, writes `~/wg/<name>.conf`, and prints your
+   generated public key (which you share with the server side).
+
+All three paths end with an offer to `vpnii install` the config into
+`/etc/wireguard/`.
 
 `install.sh` runs `vpnii setup` automatically at the end on a fresh install.
 

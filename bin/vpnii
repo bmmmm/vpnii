@@ -257,10 +257,11 @@ _setup_maintenance() {
 }
 
 # First-time wizard: triggered when /etc/wireguard is empty/missing.
-# Default path is to import an existing wg config — that's how most people
-# arrive (config from a VPN provider, a server admin, an old machine).
-# If they don't have one, the wizard falls back to generating a fresh
-# keypair + skeleton, but that's the assist path, not the main one.
+# Three paths — most users arrive at vpnii already holding a config:
+#   1) path to a config file on disk
+#   2) paste config content inline (clipboard → ~/wg/<name>.conf with mode
+#      0600 from the first byte, never a default-perm tmpfile)
+#   3) generate a fresh keypair + skeleton (assist path)
 _setup_wizard() {
   printf 'vpnii setup — first-time wizard (no configs in /etc/wireguard)\n\n'
 
@@ -268,23 +269,108 @@ _setup_wizard() {
   command -v wg       &>/dev/null || _die "wg not found  (install with: brew install wireguard-tools)"
   _ok "wg-quick: $(command -v wg-quick)"
   _ok "wg:       $(command -v wg)"
+
+  # If a tunnel is already up, warn before letting the user create another.
+  # The detection here is the same one used for the prompt indicator —
+  # /var/run/wireguard/*.name plus the manual cache dir.
+  local active=( ${(f)"$(vpnii_active_tunnels 2>/dev/null)"} )
+  if (( ${#active} > 0 )); then
+    printf '\n'
+    _warn "wg is already running — active tunnel(s):"
+    local t
+    for t in "${active[@]}"; do printf '      %s\n' "$t"; done
+    printf '\n'
+    if ! _ask "Continue with setup anyway?"; then
+      _info "aborted — tear the tunnel down first if you want a clean slate"
+      return 0
+    fi
+  fi
   printf '\n'
 
-  printf 'If you have a wg config from your VPN provider or a server admin,\n'
-  printf 'paste its path. Otherwise leave blank and vpnii will help you\n'
-  printf 'generate a fresh keypair and skeleton config.\n\n'
-  printf '  → Path to existing config (blank = generate new): '
+  printf 'What do you have?\n'
+  printf '  [1] A path to a wg config file (most common — provider, admin, backup)\n'
+  printf '  [2] The config content to paste in (clipboard never hits a tmpfile)\n'
+  printf '  [3] Nothing yet — generate a fresh keypair and skeleton\n\n'
+  printf '  → Choice [1]: '
 
+  local choice
+  read -r choice || _die "aborted"
+  : "${choice:=1}"
+
+  case "$choice" in
+    1) _wizard_import ;;
+    2) _wizard_paste ;;
+    3) _wizard_generate ;;
+    *) _die "invalid choice: $choice  (expected 1, 2 or 3)" ;;
+  esac
+}
+
+_wizard_import() {
+  printf '\n  → Path to config: '
   local source
   read -r source || _die "aborted"
   source="${source/#\~/$HOME}"
+  [[ -n "$source" ]] || _die "path required"
+  [[ -f "$source" ]] || _die "not found: $source"
+  printf '\n'
+  _cmd_install "$source"
+}
 
-  if [[ -z "$source" ]]; then
-    _wizard_generate
+# Reads pasted config content directly into ~/wg/<name>.conf. The file is
+# pre-created with mode 0600 BEFORE any content is appended, so a partial
+# paste is never readable by anyone else. CRLF from clipboard apps is
+# stripped, and presence of [Interface] / PrivateKey is sanity-checked.
+_wizard_paste() {
+  printf '\n  → Tunnel name (e.g. HomeLab): '
+  local name
+  read -r name || _die "aborted"
+  [[ -n "$name" ]] || _die "tunnel name required"
+  [[ "$name" == */* || "$name" == .* ]] && _die "invalid tunnel name: $name"
+
+  local wg_dir="$HOME/wg"
+  mkdir -p "$wg_dir"
+  chmod 700 "$wg_dir"
+  local conf="$wg_dir/${name}.conf"
+
+  if [[ -e "$conf" ]]; then
+    _warn "$conf already exists"
+    _ask "Overwrite?" || _die "aborted"
+  fi
+
+  : > "$conf"
+  chmod 600 "$conf"
+
+  printf '\n'
+  printf '  Paste the wg config below. End with a line containing only "EOF",\n'
+  printf '  or press Ctrl+D when done:\n\n'
+
+  local line
+  while IFS= read -r line; do
+    line="${line%$'\r'}"
+    [[ "$line" == "EOF" ]] && break
+    printf '%s\n' "$line" >> "$conf"
+  done
+
+  local size
+  size=$(wc -c < "$conf" | tr -d ' ')
+  printf '\n'
+  _ok "wrote $conf (mode 0600, ${size} bytes)"
+
+  if ! grep -q '^\[Interface\]' "$conf"; then
+    _warn "no [Interface] section found — paste might be incomplete"
+  fi
+  if grep -qE '^PrivateKey\s*=' "$conf"; then
+    _ok "PrivateKey present"
   else
-    [[ -f "$source" ]] || _die "not found: $source"
+    _warn "no PrivateKey line — wg-quick will refuse this config"
+  fi
+
+  printf '\n'
+  if _ask "Install to /etc/wireguard now?"; then
     printf '\n'
-    _cmd_install "$source"
+    _cmd_install "$conf"
+  else
+    printf '\nLater: vpnii install %s\n' "$conf"
   fi
 }
 
