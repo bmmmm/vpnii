@@ -1,0 +1,279 @@
+#!/usr/bin/env zsh
+# vpnii — VPN status indicator CLI
+#
+# Subcommands:
+#   vpnii up <tunnel>       mark tunnel active (manual cache)
+#   vpnii down <tunnel>     mark tunnel inactive (manual cache)
+#   vpnii list              list active tunnels (all sources, one per line)
+#   vpnii status            human-readable: "⬡ HomeLab" or "no active tunnels"
+#   vpnii clear             remove all manual state files (wg-quick unaffected)
+#   vpnii diag              show full vpnii status
+#   vpnii wg-setup <conf>   strip legacy vpnii-state hooks from a wireguard config
+
+set -euo pipefail
+
+VPNII_HOME="${0:A:h:h}"
+source "${VPNII_HOME}/lib/vpnii.zsh"
+
+_die()  { printf 'vpnii: %s\n' "$*" >&2; exit 1; }
+_info() { printf '  → %s\n' "$*"; }
+_ok()   { printf '  \033[0;32m✓\033[0m %s\n' "$*"; }
+_warn() { printf '  \033[0;33m⚠\033[0m %s\n' "$*"; }
+_err()  { printf '  \033[0;31m✗\033[0m %s\n' "$*"; }
+_hdr()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
+
+_usage() {
+  cat >&2 <<'EOF'
+usage: vpnii <command> [args]
+
+Tunnel state:
+  up <tunnel>          mark tunnel active (manual cache only)
+  down <tunnel>        mark tunnel inactive (manual cache only)
+  list                 list active tunnels — one per line, all sources
+  status               human-readable: "⬡ HomeLab" or "no active tunnels"
+  clear                remove all manual state files (wg-quick unaffected)
+
+Tools:
+  diag                 show full vpnii status
+  wg-setup <conf>      strip legacy vpnii hooks from a wireguard config
+EOF
+  exit 1
+}
+
+_validate_name() {
+  if [[ -z "$1" || "$1" == */* || "$1" == .* ]]; then
+    _die "invalid tunnel name: $1"
+  fi
+}
+
+# --- Tunnel state ----------------------------------------------------------
+
+_cmd_up() {
+  [[ $# -eq 1 ]] || _die "up requires a tunnel name"
+  _validate_name "$1"
+  if [[ -f "${VPNII_WG_DIR}/${1}.name" ]]; then
+    printf 'vpnii: %s is already up via wg-quick — no manual state needed\n' "$1" >&2
+    return 0
+  fi
+  mkdir -p "$VPNII_CACHE_DIR"
+  touch "${VPNII_CACHE_DIR}/${1}"
+}
+
+_cmd_down() {
+  [[ $# -eq 1 ]] || _die "down requires a tunnel name"
+  _validate_name "$1"
+  local cache_file="${VPNII_CACHE_DIR}/${1}"
+  local wg_marker="${VPNII_WG_DIR}/${1}.name"
+  # Idempotent: never fail. Legacy PreDown hooks call us while .name still
+  # exists — failing here would break tunnel teardown.
+  if [[ -f "$cache_file" ]]; then
+    rm -f "$cache_file"
+  elif [[ -f "$wg_marker" ]]; then
+    printf 'vpnii: %s is managed by wg-quick — to bring it down use: sudo wg-quick down %s\n' "$1" "$1" >&2
+  fi
+}
+
+_cmd_list() {
+  vpnii_active_tunnels || true
+}
+
+_cmd_status() {
+  _vpnii_collect_tunnels
+  if (( ${#reply} == 0 )); then
+    printf 'no active tunnels\n'
+  else
+    printf '%s %s\n' "$VPNII_SYM_VPN" "${(j:, :)reply}"
+  fi
+}
+
+_cmd_clear() {
+  if [[ -d "$VPNII_CACHE_DIR" ]]; then
+    rm -f "${VPNII_CACHE_DIR}/"*(N.)
+  fi
+}
+
+# --- Diagnostics -----------------------------------------------------------
+
+_cmd_diag() {
+  local zshrc="${ZDOTDIR:-$HOME}/.zshrc"
+  printf '\033[1mvpnii diag\033[0m\n'
+
+  _hdr "Active tunnels"
+  local found=0 f
+  for f in "${VPNII_WG_DIR}"/*.name(N.); do
+    _ok "wg-quick: ${f:t:r}  (${f})"
+    found=1
+  done
+  if [[ -d "$VPNII_CACHE_DIR" ]]; then
+    for f in "${VPNII_CACHE_DIR}"/*(N.); do
+      _ok "state file: ${f:t}  (${f})"
+      found=1
+    done
+  fi
+  (( found )) || printf '  no active tunnels\n'
+
+  _hdr "Detection sources"
+  if [[ -d "$VPNII_WG_DIR" ]]; then
+    _ok "wg-quick dir: $VPNII_WG_DIR"
+  else
+    _warn "wg-quick dir not found: $VPNII_WG_DIR  (wg-quick not installed?)"
+  fi
+  if [[ -d "$VPNII_CACHE_DIR" ]]; then
+    local cache_files=( "$VPNII_CACHE_DIR"/*(N.) )
+    _ok "state dir: $VPNII_CACHE_DIR  (${#cache_files} file(s))"
+  else
+    _warn "state dir missing: $VPNII_CACHE_DIR  (run install.sh)"
+  fi
+
+  _hdr "WireGuard binaries"
+  if command -v wg-quick &>/dev/null; then
+    _ok "wg-quick: $(command -v wg-quick)"
+  else
+    _warn "wg-quick not in PATH  (install wireguard-tools to bring tunnels up)"
+  fi
+  if command -v wg &>/dev/null; then
+    _ok "wg: $(command -v wg)"
+  else
+    _warn "wg not in PATH"
+  fi
+
+  _hdr "vpnii"
+  local bin="${VPNII_HOME}/bin/vpnii"
+  if [[ -x "$bin" ]]; then
+    _ok "binary: $bin"
+  else
+    _err "binary not found: $bin"
+  fi
+  if [[ -L "/usr/local/bin/vpnii" ]]; then
+    _ok "/usr/local/bin/vpnii → $(readlink /usr/local/bin/vpnii)"
+  elif command -v vpnii &>/dev/null; then
+    _ok "in PATH: $(command -v vpnii)"
+  else
+    _warn "not in PATH  (add ${VPNII_HOME}/bin to PATH)"
+  fi
+  if [[ -e "${VPNII_HOME}/bin/vpnii-state" ]]; then
+    _warn "transitional shim present: ${VPNII_HOME}/bin/vpnii-state — remove after 'vpnii wg-setup' on all configs"
+  fi
+
+  _hdr "Shell integration"
+  local zshrc_real="${zshrc:A}"
+  if grep -qF "vpnii.plugin.zsh" "$zshrc_real" 2>/dev/null; then
+    _ok "sourced in $zshrc"
+  else
+    _err "not sourced in $zshrc  (run install.sh)"
+  fi
+
+  _hdr "WireGuard configs"
+  local wg_dir="/etc/wireguard"
+  if [[ ! -d "$wg_dir" ]]; then
+    printf '  no configs in %s\n' "$wg_dir"
+  else
+    local any=0 conf
+    for conf in "$wg_dir"/*.conf(N.); do
+      any=1
+      if grep -qE "vpnii(-state)?" "$conf" 2>/dev/null; then
+        _warn "${conf:t}: has stale vpnii hooks (harmless, but can be cleaned)"
+        printf '      → sudo vpnii wg-setup %s\n' "$conf"
+      else
+        _ok "${conf:t}: clean"
+      fi
+    done
+    (( any )) || printf '  no .conf files found\n'
+  fi
+
+  printf '\n'
+}
+
+# --- WireGuard config cleanup ----------------------------------------------
+
+_cmd_wg_setup() {
+  [[ $# -eq 1 ]] || _die "usage: sudo vpnii wg-setup <wireguard-config.conf>"
+  local config="$1"
+  [[ -f "$config" ]] || _die "not found: $config"
+  [[ -r "$config" ]] || _die "not readable: $config (try sudo)"
+  [[ -w "$config" ]] || _die "not writable: $config (try sudo)"
+
+  local tunnel_name="${config:t:r}"
+  printf 'vpnii wg-setup: %s\n' "$config"
+  _info "tunnel name: $tunnel_name"
+
+  if ! grep -qE "vpnii(-state)?" "$config" 2>/dev/null; then
+    _ok "already clean — nothing to do"
+    return 0
+  fi
+
+  local backup="${config}.vpnii-bak"
+  cp "$config" "$backup"
+  _info "backup: $backup"
+
+  local tmpfile
+  tmpfile=$(mktemp)
+
+  python3 - "$config" "$tmpfile" <<'PYEOF'
+import sys, re
+
+src, dst = sys.argv[1:]
+
+# Strips ALL known vpnii state-management patterns from PostUp:
+#   old claudii: && mkdir -p ...cache/claudii && echo "X" > .../claudii/vpnii
+#   su -c form:  && su -c 'vpnii(-state) ...' - $SUDO_USER
+#   sudo form:   && sudo -u $SUDO_USER /path/vpnii(-state) up <name>
+STRIP_POSTUP = re.compile(
+    r'\s*&&\s*(?:'
+    r'mkdir\s+-p\s+\S*\.cache\S*\s*&&\s*echo\s+"[^"]*"\s*>\s*\S*/vpnii'
+    r"|su\s+-c\s+'vpnii(?:-state)?[^']*'\s+-\s+\S+"
+    r'|sudo\s+-u\s+\S+\s+\S*vpnii(?:-state)?\s+\S+\s+\S+'
+    r')'
+)
+
+# Strips ALL known vpnii state-management patterns from PreDown:
+#   old claudii path: /path/.cache/claudii/vpnii
+#   su -c form:       && su -c 'vpnii(-state) ...' - $SUDO_USER
+#   sudo form:        && sudo -u $SUDO_USER /path/vpnii(-state) down <name>
+STRIP_PREDOWN = re.compile(
+    r'(?:'
+    r'\s+\S+/\.cache\S*/vpnii\b'
+    r"|su\s+-c\s+'vpnii(?:-state)?[^']*'\s+-\s+\S+"
+    r'|\s*&&\s*sudo\s+-u\s+\S+\s+\S*vpnii(?:-state)?\s+\S+\s+\S+'
+    r')'
+)
+
+with open(src) as f:
+    lines = f.readlines()
+
+out = []
+for line in lines:
+    if re.match(r'^PostUp\s*=', line):
+        out.append(STRIP_POSTUP.sub('', line.rstrip('\n')) + '\n')
+    elif re.match(r'^PreDown\s*=', line):
+        out.append(STRIP_PREDOWN.sub('', line.rstrip('\n')) + '\n')
+    else:
+        out.append(line)
+
+with open(dst, 'w') as f:
+    f.writelines(out)
+PYEOF
+
+  cp "$tmpfile" "$config"
+  rm -f "$tmpfile"
+  _ok "PostUp/PreDown cleaned"
+  printf '\nResult:\n'
+  grep -E '^(PostUp|PreDown)' "$config" || true
+}
+
+# --- Dispatcher ------------------------------------------------------------
+
+[[ $# -eq 0 ]] && _usage
+cmd="$1"; shift
+
+case "$cmd" in
+  up)             _cmd_up "$@" ;;
+  down)           _cmd_down "$@" ;;
+  list)           _cmd_list ;;
+  status)         _cmd_status ;;
+  clear)          _cmd_clear ;;
+  diag)           _cmd_diag ;;
+  wg-setup)       _cmd_wg_setup "$@" ;;
+  -h|--help|help) _usage ;;
+  *)              _die "unknown command: $cmd  (try 'vpnii help')" ;;
+esac

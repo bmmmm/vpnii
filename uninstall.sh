@@ -6,7 +6,8 @@ set -euo pipefail
 VPNII_HOME="${0:A:h}"
 ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
 ZSHRC_REAL="${ZSHRC:A}"
-BIN_LINK="/usr/local/bin/vpnii-state"
+VPNII_LINK="/usr/local/bin/vpnii"
+LEGACY_LINK="/usr/local/bin/vpnii-state"
 VPNII_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/vpnii"
 
 _green()  { printf '\033[0;32m✓ %s\033[0m\n' "$*"; }
@@ -33,19 +34,21 @@ else
   _yellow "PATH entry not found in $ZSHRC (already removed?)"
 fi
 
-# 3. Remove /usr/local/bin symlink if it points to this install
-if [[ -L "$BIN_LINK" ]] && [[ "$(readlink "$BIN_LINK")" == "${VPNII_HOME}/bin/vpnii-state" ]]; then
-  rm -f "$BIN_LINK"
-  _green "removed $BIN_LINK"
-fi
+# 3. Remove symlinks pointing at this install
+for link in "$VPNII_LINK" "$LEGACY_LINK"; do
+  if [[ -L "$link" ]] && [[ "$(readlink "$link")" == "${VPNII_HOME}/bin/"* ]]; then
+    rm -f "$link"
+    _green "removed $link"
+  fi
+done
 
 # 4. Clear state cache
 if [[ -d "$VPNII_CACHE_DIR" ]]; then
-  rm -f "${VPNII_CACHE_DIR}/"*(N)
+  rm -f "${VPNII_CACHE_DIR}/"*(N.)
   _green "cleared state cache: $VPNII_CACHE_DIR"
 fi
 
 printf '\n'
 _green "Done. Open a new shell or: source $ZSHRC"
 printf '\nNote: WireGuard configs are unchanged.\n'
-printf 'To clean stale vpnii hooks: sudo %s/bin/vpnii-wg-setup --clean /etc/wireguard/<name>.conf\n' "$VPNII_HOME"
+printf 'To clean stale vpnii hooks: sudo %s/bin/vpnii wg-setup /etc/wireguard/<name>.conf\n' "$VPNII_HOME"

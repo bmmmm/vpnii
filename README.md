@@ -54,34 +54,30 @@ cd ~/path/to/vpnii
 Removes the source line and PATH entry from `~/.zshrc`, clears the state cache.
 WireGuard configs are left unchanged.
 
-## Other VPN tools (Passepartout, manual)
+## `vpnii` CLI
 
-For VPN clients that don't use wg-quick, manage state manually:
-
-```zsh
-vpnii-state up <tunnel>    # mark tunnel active
-vpnii-state down <tunnel>  # mark tunnel inactive
-```
-
-Or hook into your VPN client's connect/disconnect events.
-
-## `vpnii-state` CLI
+A single command with subcommands:
 
 ```
-vpnii-state up <tunnel>    mark tunnel active (writes ~/.cache/vpnii/<tunnel>)
-vpnii-state down <tunnel>  mark tunnel inactive (removes the cache file)
-vpnii-state list           list active tunnels from all sources, one per line
-vpnii-state status         "⬡ HomeLab, work" — same sources as the prompt
-vpnii-state clear          remove all manual state files (wg-quick tunnels are unaffected)
+vpnii up <tunnel>       mark tunnel active (manual cache only)
+vpnii down <tunnel>     mark tunnel inactive (manual cache only)
+vpnii list              list active tunnels (all sources, one per line)
+vpnii status            human-readable: "⬡ HomeLab" or "no active tunnels"
+vpnii clear             remove all manual state files (wg-quick unaffected)
+vpnii diag              show full vpnii status
+vpnii wg-setup <conf>   strip legacy vpnii hooks from a wireguard config
 ```
 
-`vpnii-state` only manages the manual cache directory — wg-quick tunnels are
+`up`/`down` are only needed for VPN clients that don't use wg-quick
+(Passepartout, manual scripts) — wg-quick tunnels are picked up automatically.
+
+The CLI only manages the manual cache directory. wg-quick tunnels are
 read-only from its perspective:
 
 - `up <name>` is a no-op (with a notice) if `<name>` is already up via wg-quick.
-- `down <name>` fails with a hint when `<name>` is wg-quick-managed; the correct
-  command is `sudo wg-quick down <name>`.
-- `down <name>` on an inactive tunnel exits 0 with an info message (idempotent).
+- `down <name>` warns to stderr if `<name>` is wg-quick-managed; the correct
+  command is `sudo wg-quick down <name>`. `down` is always idempotent (exit 0).
+- `down <name>` on an inactive tunnel is silent (no-op).
 
 Names containing `/`, leading `.`, or empty strings are rejected to keep
 writes confined to the cache directory.
@@ -114,7 +110,7 @@ fi
 ## Diagnostics
 
 ```zsh
-vpnii-diag
+vpnii diag
 ```
 
 Output sections:
@@ -124,9 +120,26 @@ Output sections:
 | Active tunnels | currently up — from `*.name` files and the cache dir |
 | Detection sources | both source directories exist and are readable |
 | WireGuard binaries | `wg`, `wg-quick` resolvable in PATH |
-| vpnii-state | binary present and on PATH (or symlinked to `/usr/local/bin`) |
+| vpnii | binary present and on PATH (or symlinked to `/usr/local/bin`) |
 | Shell integration | plugin sourced from `~/.zshrc` |
-| WireGuard configs | flags stale `vpnii-state` hooks in `/etc/wireguard/*.conf` |
+| WireGuard configs | flags stale `vpnii(-state)` hooks in `/etc/wireguard/*.conf` |
+
+## Migrating from older vpnii
+
+Earlier versions added `vpnii-state up/down` calls to `PostUp`/`PreDown` in
+your wireguard configs. They're harmless with the current version, but can
+be cleaned up:
+
+```zsh
+for c in /etc/wireguard/*.conf; do sudo vpnii wg-setup "$c"; done
+```
+
+This strips all known vpnii patterns from `PostUp`/`PreDown` while leaving
+other content (DNS entries, etc.) intact. A `.vpnii-bak` backup is created.
+
+The `bin/vpnii-state` shim in this repo exists for the same reason — older
+configs reference it by absolute path. Delete it manually once all your
+configs have been cleaned.
 
 ## Troubleshooting
 
@@ -136,25 +149,15 @@ Check that `/var/run/wireguard/` contains a `<name>.name` file:
 ```zsh
 ls /var/run/wireguard/
 ```
-If it does, run `vpnii-diag` to check shell integration.
+If it does, run `vpnii diag` to check shell integration.
 
 **Indicator doesn't clear after `wg-quick down`**
 
 The `.name` file should be removed by wg-quick automatically.
 If a stale state file remains in `~/.cache/vpnii/`, clear it:
 ```zsh
-vpnii-state clear
+vpnii clear
 ```
-
-**Migrating from an earlier vpnii version (PostUp/PreDown hooks)**
-
-If your WireGuard config has leftover `vpnii-state` calls in PostUp/PreDown,
-they're harmless but can be cleaned up:
-```zsh
-sudo /path/to/vpnii/bin/vpnii-wg-setup --clean /etc/wireguard/<name>.conf
-```
-This strips the `vpnii-state` calls while leaving all other PostUp/PreDown
-content (DNS entries, etc.) intact.
 
 ## Files & directories
 
@@ -162,9 +165,8 @@ content (DNS entries, etc.) intact.
 |------|---------|
 | `vpnii.plugin.zsh` | oh-my-zsh entry point — sources `lib/vpnii.zsh` |
 | `lib/vpnii.zsh` | Detection logic, `_vpnii_precmd` hook, public `vpnii_active_tunnels` API |
-| `bin/vpnii-state` | Manual state CLI for non-wg-quick VPN tools |
-| `bin/vpnii-diag` | Self-check — sources, binaries, shell integration, stale hooks |
-| `bin/vpnii-wg-setup` | Migration helper — strips legacy `vpnii-state` hooks from `*.conf` |
+| `bin/vpnii` | CLI dispatcher — all subcommands |
+| `bin/vpnii-state` | Transitional shim — forwards to `vpnii` for legacy hooks |
 | `install.sh` / `uninstall.sh` | Adds/removes the source line in `~/.zshrc` and the PATH entry |
 | `/var/run/wireguard/<name>.name` | wg-quick's tunnel marker (read-only, system-managed) |
 | `~/.cache/vpnii/<name>` | Manual state file — one empty file per active tunnel |

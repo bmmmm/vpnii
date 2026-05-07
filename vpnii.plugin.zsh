@@ -5,6 +5,7 @@
 # Standalone:        source this file from ~/.zshrc
 #
 # Configuration (set before sourcing):
+#   VPNII_WG_DIR       wg-quick socket dir   (default: /var/run/wireguard)
 #   VPNII_CACHE_DIR    state file directory  (default: ~/.cache/vpnii)
 #   VPNII_SYM_VPN      indicator symbol      (default: ⬡)
 #   VPNII_CLR_ACTIVE   zsh prompt color      (default: %F{green})
