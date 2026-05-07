@@ -23,11 +23,14 @@ config="$1"
 vpnii_state="${0:A:h}/vpnii-state"
 [[ -x "$vpnii_state" ]] || _die "vpnii-state not found at: $vpnii_state"
 
+# Tunnel name = config filename without extension (e.g. HomeLab)
+tunnel_name="${config:t:r}"
+
 printf 'vpnii-wg-setup: %s\n' "$config"
+_info "tunnel name: $tunnel_name"
 _info "vpnii-state: $vpnii_state"
 
 # Already migrated with correct tunnel name?
-tunnel_name="${config:t:r}"
 if grep -qE "^PostUp.*sudo -u.*vpnii-state up ${tunnel_name}" "$config" 2>/dev/null; then
   _ok "already migrated — nothing to do"
   exit 0
@@ -38,51 +41,40 @@ backup="${config}.vpnii-bak"
 cp "$config" "$backup"
 _info "backup: $backup"
 
-# Patch via Python (reliable multi-pattern replacement, macOS sed compat)
 tmpfile=$(mktemp)
 trap 'rm -f "$tmpfile"' EXIT
 
-python3 - "$config" "$tmpfile" "$vpnii_state" <<'PYEOF'
-import sys, re
+python3 - "$config" "$tmpfile" "$vpnii_state" "$tunnel_name" <<'PYEOF'
+import sys, re, os
 
-src, dst, vpnii_bin = sys.argv[1], sys.argv[2], sys.argv[3]
+src, dst, vpnii_bin, tunnel_name = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 
-# Strip old claudii/vpnii state patterns from PostUp:
-#   && mkdir -p /path/.cache/claudii && echo "Name" > /path/.cache/claudii/vpnii
-STRIP_POSTUP_CLAUDII = re.compile(
-    r'\s*&&\s*mkdir\s+-p\s+\S*\.cache\S*\s*&&\s*echo\s+"[^"]*"\s*>\s*\S*/vpnii'
+# Strip ALL historical vpnii state patterns from PostUp — covers every migration variant:
+#   old claudii: && mkdir -p ...cache/claudii && echo "X" > .../claudii/vpnii
+#   su -c form:  && su -c 'vpnii-state ...' - $SUDO_USER
+#   sudo %i:     && sudo -u $SUDO_USER /path/vpnii-state up %i
+#   sudo utunN:  && sudo -u $SUDO_USER /path/vpnii-state up utun9
+#   sudo name:   && sudo -u $SUDO_USER /path/vpnii-state up HomeLab  (re-patch)
+STRIP_POSTUP = re.compile(
+    r'\s*&&\s*(?:'
+    r'mkdir\s+-p\s+\S*\.cache\S*\s*&&\s*echo\s+"[^"]*"\s*>\s*\S*/vpnii'
+    r"|su\s+-c\s+'vpnii-state[^']*'\s+-\s+\S+"
+    r'|sudo\s+-u\s+\S+\s+\S*vpnii-state\s+\S+\s+\S+'
+    r')'
 )
 
-# Strip wrong su -c pattern (first migration attempt, macOS-incompatible):
-#   && su -c 'vpnii-state ...' - $SUDO_USER
-STRIP_POSTUP_SU = re.compile(
-    r"\s*&&\s*su\s+-c\s+'vpnii-state[^']*'\s+-\s+\S+"
+# Strip ALL historical vpnii state patterns from PreDown:
+#   old claudii path: /path/.cache/claudii/vpnii (as rm -f argument)
+#   su -c form:       && su -c 'vpnii-state ...' - $SUDO_USER
+#   sudo form:        && sudo -u $SUDO_USER /path/vpnii-state down X
+STRIP_PREDOWN = re.compile(
+    r'(?:'
+    r'\s+\S+/\.cache\S*/vpnii\b'
+    r"|su\s+-c\s+'vpnii-state[^']*'\s+-\s+\S+"
+    r'|\s*&&\s*sudo\s+-u\s+\S+\s+\S*vpnii-state\s+\S+\s+\S+'
+    r')'
 )
 
-# Strip previous correct-but-wrong-name pattern (used %i → utun9 instead of config name):
-#   && sudo -u $SUDO_USER /path/vpnii-state up utun\d+
-STRIP_POSTUP_UTUN = re.compile(
-    r"\s*&&\s*sudo\s+-u\s+\S+\s+\S+vpnii-state\s+\S+\s+utun\d+"
-)
-
-# Strip old claudii/vpnii path from PreDown args:
-#   /path/.cache/claudii/vpnii
-STRIP_PREDOWN_CLAUDII = re.compile(r'\s+\S+/\.cache\S*/vpnii\b')
-
-# Strip wrong su -c pattern from PreDown:
-STRIP_PREDOWN_SU = re.compile(
-    r"\s*&&\s*su\s+-c\s+'vpnii-state[^']*'\s+-\s+\S+"
-)
-
-# Strip previous correct-but-wrong-name pattern from PreDown (utun device name):
-STRIP_PREDOWN_UTUN = re.compile(
-    r"\s*&&\s*sudo\s+-u\s+\S+\s+\S+vpnii-state\s+\S+\s+utun\d+"
-)
-
-# Use config filename as tunnel name — on macOS, %i gives the utun
-# device name (e.g. utun9), not the friendly config name (e.g. HomeLab)
-import os
-tunnel_name = os.path.splitext(os.path.basename(src))[0]
 NEW_POSTUP  = f" && sudo -u $SUDO_USER {vpnii_bin} up {tunnel_name}"
 NEW_PREDOWN = f" && sudo -u $SUDO_USER {vpnii_bin} down {tunnel_name}"
 
@@ -93,42 +85,27 @@ out = []
 changed_postup = changed_predown = False
 for line in lines:
     if re.match(r'^PostUp\s*=', line):
-        patched = line.rstrip('\n')
-        patched = STRIP_POSTUP_CLAUDII.sub('', patched)
-        patched = STRIP_POSTUP_SU.sub('', patched)
-        patched = STRIP_POSTUP_UTUN.sub('', patched)
-        if 'vpnii-state' not in patched:
-            patched += NEW_POSTUP
+        patched = STRIP_POSTUP.sub('', line.rstrip('\n'))
+        patched += NEW_POSTUP
         out.append(patched + '\n')
         changed_postup = True
     elif re.match(r'^PreDown\s*=', line):
-        patched = line.rstrip('\n')
-        patched = STRIP_PREDOWN_CLAUDII.sub('', patched)
-        patched = STRIP_PREDOWN_SU.sub('', patched)
-        patched = STRIP_PREDOWN_UTUN.sub('', patched)
-        if 'vpnii-state' not in patched:
-            patched += NEW_PREDOWN
+        patched = STRIP_PREDOWN.sub('', line.rstrip('\n'))
+        patched += NEW_PREDOWN
         out.append(patched + '\n')
         changed_predown = True
     else:
         out.append(line)
 
 if not (changed_postup or changed_predown):
-    print("WARN: no PostUp/PreDown found — adding after [Interface]", file=sys.stderr)
-    iface_idx = next((i for i, l in enumerate(out) if l.strip() == '[Interface]'), None)
-    if iface_idx is not None:
-        insert_at = iface_idx + 1
-        while insert_at < len(out) and out[insert_at].strip() and not out[insert_at].startswith('['):
-            insert_at += 1
-        out.insert(insert_at, NEW_PREDOWN.lstrip(' &&') + '\n')
-        out.insert(insert_at, NEW_POSTUP.lstrip(' &&') + '\n')
+    print("WARN: no PostUp/PreDown found", file=sys.stderr)
 
 with open(dst, 'w') as f:
     f.writelines(out)
 PYEOF
 
-# Verify correct form
-if ! grep -qE "^PostUp.*sudo -u.*vpnii-state" "$tmpfile"; then
+# Verify correct tunnel name is present
+if ! grep -qE "^PostUp.*sudo -u.*vpnii-state up ${tunnel_name}" "$tmpfile"; then
   cp "$backup" "$config"
   _die "patch failed — restored backup"
 fi
@@ -138,4 +115,4 @@ _ok "PostUp updated"
 _ok "PreDown updated"
 printf '\nResult:\n'
 grep -E '^(PostUp|PreDown)' "$config"
-printf '\nRun: sudo wg-quick down <tunnel> && sudo wg-quick up <tunnel>\n'
+printf '\nRun: sudo wg-quick down %s && sudo wg-quick up %s\n' "$tunnel_name" "$tunnel_name"
