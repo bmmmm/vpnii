@@ -37,6 +37,7 @@ source "${VPNII_HOME}/lib/ui.zsh"
 source "${VPNII_HOME}/lib/strip.zsh"
 source "${VPNII_HOME}/lib/cmd-tunnel.zsh"
 source "${VPNII_HOME}/lib/cmd-tailscale.zsh"
+source "${VPNII_HOME}/lib/cmd-ip.zsh"
 source "${VPNII_HOME}/lib/cmd-diag.zsh"
 source "${VPNII_HOME}/lib/cmd-setup.zsh"
 source "${VPNII_HOME}/lib/cmd-wizard.zsh"
@@ -58,6 +59,7 @@ Tunnel state:
                        tailscale when up). 'tailscale' runs 'tailscale down'.
   list                 list active tunnels — one per line (excludes tailscale)
   status               human-readable: "⬡ HomeLab  ⬢ ts" / "⊖ off"
+  ip [-4 | -6]         show current external IP (sanity check after up/down)
   clear                remove all manual state files (wg-quick unaffected)
 
 Tools:
@@ -84,6 +86,7 @@ case "$cmd" in
   down)           _cmd_down "$@" ;;
   list)           _cmd_list ;;
   status)         _cmd_status ;;
+  ip)             _cmd_ip "$@" ;;
   clear)          _cmd_clear ;;
   diag)           _cmd_diag ;;
   setup)          _cmd_setup "$@" ;;

@@ -10,6 +10,7 @@ _vpnii() {
     'down:bring tunnel down (or pick from active)'
     'list:list active tunnels'
     'status:human-readable status line'
+    'ip:show current external IP'
     'clear:remove manual cache state'
     'diag:show full vpnii status'
     'setup:maintain configs / first-time wizard'
@@ -55,6 +56,10 @@ _vpnii() {
       ;;
     setup|install|export)
       _files -g '*.conf'
+      ;;
+    ip)
+      local -a flags=('-4:IPv4 (default)' '-6:IPv6')
+      _describe -t flags 'address family' flags
       ;;
   esac
 }
