@@ -68,12 +68,15 @@ Or hook into your VPN client's connect/disconnect events.
 ## `vpnii-state` CLI
 
 ```
-vpnii-state up <tunnel>    mark tunnel active
-vpnii-state down <tunnel>  mark tunnel inactive
-vpnii-state list           list active tunnels (one per line)
-vpnii-state status         human-readable: "⬡ HomeLab" or "no active tunnels"
-vpnii-state clear          remove all state files
+vpnii-state up <tunnel>    mark tunnel active (writes ~/.cache/vpnii/<tunnel>)
+vpnii-state down <tunnel>  mark tunnel inactive (removes the cache file)
+vpnii-state list           list active tunnels from all sources, one per line
+vpnii-state status         "⬡ HomeLab, work" — same sources as the prompt
+vpnii-state clear          remove all manual state files (wg-quick tunnels are unaffected)
 ```
+
+`up` and `down` reject names with `/`, leading `.`, or empty strings to keep
+writes confined to the cache directory.
 
 ## Configuration
 
@@ -106,8 +109,16 @@ fi
 vpnii-diag
 ```
 
-Shows active tunnels, detection sources, binary/PATH status, and flags any
-stale WireGuard config hooks left over from earlier vpnii versions.
+Output sections:
+
+| Section | What it checks |
+|---------|----------------|
+| Active tunnels | currently up — from `*.name` files and the cache dir |
+| Detection sources | both source directories exist and are readable |
+| WireGuard binaries | `wg`, `wg-quick` resolvable in PATH |
+| vpnii-state | binary present and on PATH (or symlinked to `/usr/local/bin`) |
+| Shell integration | plugin sourced from `~/.zshrc` |
+| WireGuard configs | flags stale `vpnii-state` hooks in `/etc/wireguard/*.conf` |
 
 ## Troubleshooting
 
@@ -136,6 +147,19 @@ sudo /path/to/vpnii/bin/vpnii-wg-setup --clean /etc/wireguard/<name>.conf
 ```
 This strips the `vpnii-state` calls while leaving all other PostUp/PreDown
 content (DNS entries, etc.) intact.
+
+## Files & directories
+
+| Path | Purpose |
+|------|---------|
+| `vpnii.plugin.zsh` | oh-my-zsh entry point — sources `lib/vpnii.zsh` |
+| `lib/vpnii.zsh` | Detection logic, `_vpnii_precmd` hook, public `vpnii_active_tunnels` API |
+| `bin/vpnii-state` | Manual state CLI for non-wg-quick VPN tools |
+| `bin/vpnii-diag` | Self-check — sources, binaries, shell integration, stale hooks |
+| `bin/vpnii-wg-setup` | Migration helper — strips legacy `vpnii-state` hooks from `*.conf` |
+| `install.sh` / `uninstall.sh` | Adds/removes the source line in `~/.zshrc` and the PATH entry |
+| `/var/run/wireguard/<name>.name` | wg-quick's tunnel marker (read-only, system-managed) |
+| `~/.cache/vpnii/<name>` | Manual state file — one empty file per active tunnel |
 
 ## Roadmap
 

@@ -4,26 +4,32 @@
 # Usage:
 #   vpnii-state up <tunnel>    mark tunnel active
 #   vpnii-state down <tunnel>  mark tunnel inactive
-#   vpnii-state list           list active tunnels (one per line)
-#   vpnii-state status         human-readable status
-#   vpnii-state clear          clear all active tunnels
+#   vpnii-state list           list active tunnels (one per line, all sources)
+#   vpnii-state status         human-readable status (all sources)
+#   vpnii-state clear          clear all manual state files
 #
-# wg-quick integration (macOS — sudo -u from root context, no password needed):
-#   PostUp  = sudo -u $SUDO_USER vpnii-state up %i
-#   PreDown = sudo -u $SUDO_USER vpnii-state down %i
-#
-# %i is replaced by wg-quick with the interface name.
-# vpnii-state must be in sudo's secure PATH — run install.sh first.
+# wg-quick integration is automatic on macOS via /var/run/wireguard/<name>.name —
+# no PostUp/PreDown hooks needed. Use up/down only for VPN tools that don't use
+# wg-quick (Passepartout, manual scripts).
 
 set -euo pipefail
 
-VPNII_CACHE_DIR="${VPNII_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/vpnii}"
-VPNII_SYM_VPN="${VPNII_SYM_VPN:-⬡}"
+# Source library for shared detection logic. The hook in lib/vpnii.zsh is
+# guarded against non-interactive shells, so this is side-effect free.
+VPNII_HOME="${0:A:h:h}"
+source "${VPNII_HOME}/lib/vpnii.zsh"
 
 _die() { printf 'vpnii-state: %s\n' "$*" >&2; exit 1; }
 _usage() {
   printf 'usage: vpnii-state up <tunnel> | down <tunnel> | list | status | clear\n' >&2
   exit 1
+}
+
+# Reject names that would escape the cache dir or hide as dotfiles.
+_validate_name() {
+  if [[ -z "$1" || "$1" == */* || "$1" == .* ]]; then
+    _die "invalid tunnel name: $1"
+  fi
 }
 
 [[ $# -eq 0 ]] && _usage
@@ -32,33 +38,31 @@ cmd="$1"; shift
 case "$cmd" in
   up)
     [[ $# -eq 1 ]] || _die "up requires a tunnel name"
+    _validate_name "$1"
     mkdir -p "$VPNII_CACHE_DIR"
     touch "${VPNII_CACHE_DIR}/${1}"
     ;;
   down)
     [[ $# -eq 1 ]] || _die "down requires a tunnel name"
+    _validate_name "$1"
     rm -f "${VPNII_CACHE_DIR}/${1}"
     ;;
   list)
-    [[ -d "$VPNII_CACHE_DIR" ]] || exit 0
-    for f in "$VPNII_CACHE_DIR"/*(N); do
-      [[ -f "$f" ]] && printf '%s\n' "${f:t}"
-    done
+    vpnii_active_tunnels || true
     ;;
   status)
-    [[ -d "$VPNII_CACHE_DIR" ]] || { printf 'no active tunnels\n'; exit 0; }
-    tunnels=()
-    for f in "$VPNII_CACHE_DIR"/*(N); do
-      [[ -f "$f" ]] && tunnels+=("${f:t}")
-    done
-    if (( ${#tunnels} == 0 )); then
+    # `reply` is zsh's conventional out-array; _vpnii_collect_tunnels resets it.
+    _vpnii_collect_tunnels
+    if (( ${#reply} == 0 )); then
       printf 'no active tunnels\n'
     else
-      printf '%s %s\n' "$VPNII_SYM_VPN" "${(j:, :)tunnels}"
+      printf '%s %s\n' "$VPNII_SYM_VPN" "${(j:, :)reply}"
     fi
     ;;
   clear)
-    [[ -d "$VPNII_CACHE_DIR" ]] && rm -f "${VPNII_CACHE_DIR}/"*(N)
+    if [[ -d "$VPNII_CACHE_DIR" ]]; then
+      rm -f "${VPNII_CACHE_DIR}/"*(N.)
+    fi
     ;;
   *)
     _usage
