@@ -8,7 +8,7 @@
 #   vpnii status            human-readable: "⬡ HomeLab" or "no active tunnels"
 #   vpnii clear             remove all manual state files (wg-quick unaffected)
 #   vpnii diag              show full vpnii status
-#   vpnii wg-setup <conf>   strip legacy vpnii-state hooks from a wireguard config
+#   vpnii setup [<conf>]    interactive: chown wg configs to user, strip stale hooks
 
 set -euo pipefail
 
@@ -35,7 +35,8 @@ Tunnel state:
 
 Tools:
   diag                 show full vpnii status
-  wg-setup <conf>      strip legacy vpnii hooks from a wireguard config
+  setup [<conf>...]    interactive: chown wireguard configs and strip stale hooks
+                       (no args = scan /etc/wireguard, args = specific files)
 EOF
   exit 1
 }
@@ -173,7 +174,7 @@ _cmd_diag() {
       any=1
       if grep -qE "vpnii(-state)?" "$conf" 2>/dev/null; then
         _warn "${conf:t}: has stale vpnii hooks (harmless, but can be cleaned)"
-        printf '      → sudo vpnii wg-setup %s\n' "$conf"
+        printf '      → vpnii setup %s\n' "$conf"
       else
         _ok "${conf:t}: clean"
       fi
@@ -184,32 +185,95 @@ _cmd_diag() {
   printf '\n'
 }
 
-# --- WireGuard config cleanup ----------------------------------------------
+# --- WireGuard config setup (chown + strip stale hooks) --------------------
 
-_cmd_wg_setup() {
-  [[ $# -eq 1 ]] || _die "usage: sudo vpnii wg-setup <wireguard-config.conf>"
-  local config="$1"
-  [[ -f "$config" ]] || _die "not found: $config"
-  [[ -r "$config" ]] || _die "not readable: $config (try sudo)"
-  [[ -w "$config" ]] || _die "not writable: $config (try sudo)"
+# Interactive yes/no prompt. Defaults to yes; non-interactive (closed stdin)
+# returns no so unattended runs don't make destructive guesses.
+_ask() {
+  local prompt="$1" answer
+  printf '  → %s [Y/n] ' "$prompt"
+  if ! read -r answer; then
+    printf 'no (no tty)\n' >&2
+    return 1
+  fi
+  [[ "${answer:l}" != "n" ]]
+}
 
-  local tunnel_name="${config:t:r}"
-  printf 'vpnii wg-setup: %s\n' "$config"
-  _info "tunnel name: $tunnel_name"
-
-  if ! grep -qE "vpnii(-state)?" "$config" 2>/dev/null; then
-    _ok "already clean — nothing to do"
-    return 0
+_cmd_setup() {
+  local configs=()
+  if (( $# == 0 )); then
+    configs=( /etc/wireguard/*.conf(N.) )
+    if (( ${#configs} == 0 )); then
+      printf 'vpnii setup: no wireguard configs in /etc/wireguard\n'
+      return 0
+    fi
+  else
+    configs=( "$@" )
   fi
 
-  local backup="${config}.vpnii-bak"
-  cp "$config" "$backup"
+  printf 'vpnii setup — %d config(s) to check\n' "${#configs}"
+  local conf
+  for conf in "${configs[@]}"; do
+    if [[ ! -e "$conf" ]]; then
+      _warn "$conf not found, skipping"
+      continue
+    fi
+    _setup_one "$conf"
+  done
+  printf '\n'
+}
+
+_setup_one() {
+  local conf="$1"
+  local name="${conf:t:r}"
+  printf '\n\033[1m%s\033[0m  (%s)\n' "$name" "$conf"
+
+  # 1. Ownership — let the user own the file so future edits and cleanups
+  # don't need sudo. Skipped if already owned.
+  local owner
+  owner=$(stat -f '%Su' "$conf" 2>/dev/null || stat -c '%U' "$conf" 2>/dev/null || echo '?')
+  if [[ "$owner" == "$USER" ]]; then
+    _ok "owned by $USER"
+  else
+    _warn "owned by $owner — sudo needed for read/write"
+    if _ask "Take ownership? (sudo chown $USER:staff $conf)"; then
+      sudo chown "$USER:staff" "$conf"
+      _ok "now owned by $USER"
+    else
+      _info "leaving ownership as-is — further steps may need sudo"
+    fi
+  fi
+
+  # 2. Stale hooks — only check if we can read the file.
+  if [[ ! -r "$conf" ]]; then
+    _err "not readable — skipping hook check"
+    return
+  fi
+  if grep -qE "vpnii(-state)?" "$conf" 2>/dev/null; then
+    _warn "stale vpnii hooks found in PostUp/PreDown"
+    if _ask "Strip them?"; then
+      _strip_hooks "$conf"
+    fi
+  else
+    _ok "no stale vpnii hooks"
+  fi
+}
+
+# Strips known vpnii(-state) calls from PostUp/PreDown. Backup on the side.
+_strip_hooks() {
+  local conf="$1"
+  if [[ ! -w "$conf" ]]; then
+    _err "not writable — cannot strip"
+    return 1
+  fi
+
+  local backup="${conf}.vpnii-bak"
+  cp "$conf" "$backup"
   _info "backup: $backup"
 
   local tmpfile
   tmpfile=$(mktemp)
-
-  python3 - "$config" "$tmpfile" <<'PYEOF'
+  python3 - "$conf" "$tmpfile" <<'PYEOF'
 import sys, re
 
 src, dst = sys.argv[1:]
@@ -254,11 +318,9 @@ with open(dst, 'w') as f:
     f.writelines(out)
 PYEOF
 
-  cp "$tmpfile" "$config"
+  cp "$tmpfile" "$conf"
   rm -f "$tmpfile"
-  _ok "PostUp/PreDown cleaned"
-  printf '\nResult:\n'
-  grep -E '^(PostUp|PreDown)' "$config" || true
+  _ok "stripped (backup at $backup)"
 }
 
 # --- Dispatcher ------------------------------------------------------------
@@ -273,7 +335,7 @@ case "$cmd" in
   status)         _cmd_status ;;
   clear)          _cmd_clear ;;
   diag)           _cmd_diag ;;
-  wg-setup)       _cmd_wg_setup "$@" ;;
+  setup)          _cmd_setup "$@" ;;
   -h|--help|help) _usage ;;
   *)              _die "unknown command: $cmd  (try 'vpnii help')" ;;
 esac

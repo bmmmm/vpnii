@@ -45,9 +45,23 @@ fi
 
 printf '\n'
 _green "Done. Open a new shell or: source $ZSHRC"
+
+# 3. Interactive wireguard config setup — chown to current user + strip
+# stale hooks. Skipped silently if no configs exist or stdin isn't a tty.
+configs=( /etc/wireguard/*.conf(N.) )
+if (( ${#configs} > 0 )) && [[ -t 0 ]]; then
+  printf '\n'
+  _bold "WireGuard configs"
+  printf 'Found %d config(s) in /etc/wireguard.\n' "${#configs}"
+  printf 'vpnii setup takes ownership (so you can edit without sudo) and strips\n'
+  printf 'any legacy vpnii hooks left over from older installs.\n\n'
+  printf 'Run interactive setup now? [Y/n] '
+  read -r answer
+  if [[ "${answer:l}" != "n" ]]; then
+    "$BIN_SOURCE" setup
+  fi
+fi
+
 printf '\n'
 printf 'wg-quick tunnels are detected automatically — no config changes needed.\n'
 printf 'For other VPN tools: vpnii up <name> / vpnii down <name>\n'
-printf '\n'
-printf 'Migrating from an older vpnii? Strip legacy PostUp/PreDown hooks:\n'
-printf '  for c in /etc/wireguard/*.conf; do sudo vpnii wg-setup "$c"; done\n'

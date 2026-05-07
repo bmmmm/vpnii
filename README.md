@@ -65,7 +65,7 @@ vpnii list              list active tunnels (all sources, one per line)
 vpnii status            human-readable: "⬡ HomeLab" or "no active tunnels"
 vpnii clear             remove all manual state files (wg-quick unaffected)
 vpnii diag              show full vpnii status
-vpnii wg-setup <conf>   strip legacy vpnii hooks from a wireguard config
+vpnii setup [<conf>...] interactive: chown wireguard configs and strip stale hooks
 ```
 
 `up`/`down` are only needed for VPN clients that don't use wg-quick
@@ -124,22 +124,31 @@ Output sections:
 | Shell integration | plugin sourced from `~/.zshrc` |
 | WireGuard configs | flags stale `vpnii(-state)` hooks in `/etc/wireguard/*.conf` |
 
-## Migrating from older vpnii
+## `vpnii setup`
 
-Earlier versions added `vpnii-state up/down` calls to `PostUp`/`PreDown` in
-your wireguard configs. They're harmless with the current version, but can
-be cleaned up:
+Interactive helper that brings each wireguard config into a sudo-free state:
 
 ```zsh
-for c in /etc/wireguard/*.conf; do sudo vpnii wg-setup "$c"; done
+vpnii setup            # scan all configs in /etc/wireguard
+vpnii setup <conf>     # one or more specific paths
 ```
 
-This strips all known vpnii patterns from `PostUp`/`PreDown` while leaving
-other content (DNS entries, etc.) intact. A `.vpnii-bak` backup is created.
+Per config, it offers two operations:
 
-The `bin/vpnii-state` shim in this repo exists for the same reason — older
-configs reference it by absolute path. Delete it manually once all your
-configs have been cleaned.
+1. **Take ownership** — `sudo chown $USER:staff <conf>`. Only step that
+   needs sudo, and only once per config. After this, you can edit and
+   clean the file without root. wg-quick continues to work because
+   wg-quick itself runs as root and reads the file regardless of owner.
+2. **Strip legacy hooks** — removes any `vpnii-state up/down` calls from
+   `PostUp`/`PreDown` left over from older versions. A `.vpnii-bak`
+   backup is written next to the config.
+
+`install.sh` runs `vpnii setup` automatically at the end if `/etc/wireguard`
+already contains configs.
+
+The `bin/vpnii-state` shim in this repo exists so legacy hooks (which
+embed an absolute path) keep working until `vpnii setup` has cleaned all
+configs. Safe to delete after that.
 
 ## Troubleshooting
 
