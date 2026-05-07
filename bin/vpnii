@@ -17,6 +17,10 @@
 #                                   the clean version to ~/wg/<name>.conf (or <dir>)
 
 set -euo pipefail
+# Restrictive umask: any new file we write (config skeleton, paste target,
+# cache markers) lands at mode 0600 even before an explicit chmod, so a
+# Ctrl+C between write and chmod can't leave a world-readable PrivateKey.
+umask 077
 
 VPNII_HOME="${0:A:h:h}"
 source "${VPNII_HOME}/lib/vpnii.zsh"
@@ -682,17 +686,22 @@ _cmd_install() {
     fi
   fi
 
-  if [[ ! -d /etc/wireguard ]]; then
-    _info "creating /etc/wireguard"
-    sudo mkdir -p /etc/wireguard
-    sudo chmod 700 /etc/wireguard
-  fi
-
-  _info "sudo cp $source $target"
-  sudo cp "$source" "$target"
-  _info "sudo chown $USER:staff $target"
-  sudo chown "$USER:staff" "$target"
-  sudo chmod 600 "$target"
+  # Single sudo handles dir creation (if needed) + cp + chown + chmod under
+  # one `set -e` shell. -p preserves the source mode (0600), and the bundle
+  # means a Ctrl+C between steps can't leave the target half-owned by root.
+  _info "sudo: install + chown to $USER:staff"
+  sudo sh -s "$source" "$target" "$USER:staff" <<'SUDO_BLOCK'
+set -e
+src="$1"; dst="$2"; owner="$3"
+parent="$(dirname "$dst")"
+if [ ! -d "$parent" ]; then
+  mkdir -p "$parent"
+  chmod 700 "$parent"
+fi
+cp -p "$src" "$dst"
+chown "$owner" "$dst"
+chmod 600 "$dst"
+SUDO_BLOCK
 
   printf '\n'
   _ok "installed at $target (owned by $USER, mode 0600)"
