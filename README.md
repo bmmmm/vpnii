@@ -6,11 +6,11 @@ VPN status indicator for zsh. Shows active WireGuard tunnels in your RPROMPT.
 ~  ⬡ HomeLab
 ```
 
-Zero dependencies. No background processes. No polling. No config changes to WireGuard.
+Zero dependencies. No background processes. No polling. No WireGuard config changes needed.
 
 ## How it works
 
-vpnii detects active tunnels from system state — no hooks, no elevated privileges needed:
+vpnii detects active tunnels from system state — no hooks, no elevated privileges:
 
 | Source | When used |
 |--------|-----------|
@@ -27,7 +27,7 @@ cd ~/path/to/vpnii
 ./install.sh
 ```
 
-That's it. No WireGuard config changes required.
+Open a new shell — that's it. No WireGuard config changes, no sudo required.
 
 ### oh-my-zsh
 
@@ -43,6 +43,16 @@ Add `vpnii` to your `plugins=()` in `~/.zshrc`.
 ```zsh
 source /path/to/vpnii/vpnii.plugin.zsh
 ```
+
+## Uninstall
+
+```zsh
+cd ~/path/to/vpnii
+./uninstall.sh
+```
+
+Removes the source line and PATH entry from `~/.zshrc`, clears the state cache.
+WireGuard configs are left unchanged.
 
 ## Other VPN tools (Passepartout, manual)
 
@@ -76,7 +86,7 @@ Set these before sourcing vpnii:
 | `VPNII_SYM_VPN` | `⬡` | Indicator symbol |
 | `VPNII_CLR_ACTIVE` | `%F{green}` | zsh prompt color |
 | `VPNII_CLR_RESET` | `%f` | zsh prompt reset |
-| `VPNII_ENABLED` | `1` | Set to `0` to disable the hook |
+| `VPNII_ENABLED` | `1` | Set to `0` to disable |
 
 ## Public API
 
@@ -89,6 +99,43 @@ if vpnii_active_tunnels &>/dev/null; then
   echo "VPN is up"
 fi
 ```
+
+## Diagnostics
+
+```zsh
+vpnii-diag
+```
+
+Shows active tunnels, detection sources, binary/PATH status, and flags any
+stale WireGuard config hooks left over from earlier vpnii versions.
+
+## Troubleshooting
+
+**Indicator doesn't appear after `wg-quick up`**
+
+Check that `/var/run/wireguard/` contains a `<name>.name` file:
+```zsh
+ls /var/run/wireguard/
+```
+If it does, run `vpnii-diag` to check shell integration.
+
+**Indicator doesn't clear after `wg-quick down`**
+
+The `.name` file should be removed by wg-quick automatically.
+If a stale state file remains in `~/.cache/vpnii/`, clear it:
+```zsh
+vpnii-state clear
+```
+
+**Migrating from an earlier vpnii version (PostUp/PreDown hooks)**
+
+If your WireGuard config has leftover `vpnii-state` calls in PostUp/PreDown,
+they're harmless but can be cleaned up:
+```zsh
+sudo /path/to/vpnii/bin/vpnii-wg-setup --clean /etc/wireguard/<name>.conf
+```
+This strips the `vpnii-state` calls while leaving all other PostUp/PreDown
+content (DNS entries, etc.) intact.
 
 ## Roadmap
 

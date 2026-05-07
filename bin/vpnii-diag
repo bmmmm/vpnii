@@ -1,0 +1,93 @@
+#!/usr/bin/env zsh
+# vpnii-diag — show full vpnii status and surface any issues
+
+VPNII_HOME="${0:A:h:h}"
+VPNII_WG_DIR="${VPNII_WG_DIR:-/var/run/wireguard}"
+VPNII_CACHE_DIR="${VPNII_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/vpnii}"
+ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
+
+_ok()   { printf '  \033[0;32m✓\033[0m %s\n' "$*"; }
+_warn() { printf '  \033[0;33m⚠\033[0m %s\n' "$*"; }
+_err()  { printf '  \033[0;31m✗\033[0m %s\n' "$*"; }
+_hdr()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
+
+printf '\033[1mvpnii-diag\033[0m\n'
+
+# --- Active tunnels ---
+_hdr "Active tunnels"
+found=0
+for f in "${VPNII_WG_DIR}"/*.name(N); do
+  [[ -f "$f" ]] || continue
+  _ok "wg-quick: ${f:t:r}  (${f})"
+  found=1
+done
+if [[ -d "$VPNII_CACHE_DIR" ]]; then
+  for f in "${VPNII_CACHE_DIR}"/*(N); do
+    [[ -f "$f" ]] || continue
+    _ok "state file: ${f:t}  (${f})"
+    found=1
+  done
+fi
+(( found )) || printf '  no active tunnels\n'
+
+# --- Detection sources ---
+_hdr "Detection sources"
+if [[ -d "$VPNII_WG_DIR" ]]; then
+  _ok "wg-quick dir: $VPNII_WG_DIR"
+else
+  _warn "wg-quick dir not found: $VPNII_WG_DIR  (wg-quick not installed?)"
+fi
+if [[ -d "$VPNII_CACHE_DIR" ]]; then
+  local count
+  count=$(ls "$VPNII_CACHE_DIR" 2>/dev/null | wc -l | tr -d ' ')
+  _ok "state dir: $VPNII_CACHE_DIR  ($count file(s))"
+else
+  _warn "state dir missing: $VPNII_CACHE_DIR  (run install.sh)"
+fi
+
+# --- Binaries ---
+_hdr "Binaries"
+bin="${VPNII_HOME}/bin/vpnii-state"
+if [[ -x "$bin" ]]; then
+  _ok "vpnii-state: $bin"
+else
+  _err "vpnii-state not found: $bin"
+fi
+if [[ -L "/usr/local/bin/vpnii-state" ]]; then
+  _ok "/usr/local/bin/vpnii-state → $(readlink /usr/local/bin/vpnii-state)"
+elif command -v vpnii-state &>/dev/null; then
+  _ok "vpnii-state in PATH: $(command -v vpnii-state)"
+else
+  _warn "vpnii-state not in PATH  (add ${VPNII_HOME}/bin to PATH)"
+fi
+
+# --- Shell integration ---
+_hdr "Shell integration"
+zshrc_real="${ZSHRC:A}"
+if grep -qF "vpnii.plugin.zsh" "$zshrc_real" 2>/dev/null; then
+  _ok "sourced in $ZSHRC"
+else
+  _err "not sourced in $ZSHRC  (run install.sh)"
+fi
+
+# --- WireGuard configs ---
+_hdr "WireGuard configs"
+wg_dir="/etc/wireguard"
+if [[ ! -d "$wg_dir" ]]; then
+  printf '  no configs in %s\n' "$wg_dir"
+else
+  any=0
+  for conf in "$wg_dir"/*.conf(N); do
+    [[ -f "$conf" ]] || continue
+    any=1
+    if grep -qE "vpnii-state" "$conf" 2>/dev/null; then
+      _warn "${conf:t}: has stale vpnii-state hooks (harmless, but can be cleaned)"
+      printf '      → sudo %s/bin/vpnii-wg-setup --clean %s\n' "$VPNII_HOME" "$conf"
+    else
+      _ok "${conf:t}: clean"
+    fi
+  done
+  (( any )) || printf '  no .conf files found\n'
+fi
+
+printf '\n'
