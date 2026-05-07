@@ -296,6 +296,17 @@ _setup_wizard() {
   else
     _ok "no active tunnels (checked .name files and wg show)"
   fi
+
+  # If WireGuard.app is installed, give a hint on how to extract its tunnels —
+  # those are stored in Keychain + NetworkExtension, not as .conf files, but
+  # the app has an "Export Tunnels" feature that produces a .zip we can use.
+  if [[ -d /Applications/WireGuard.app || -d "$HOME/Applications/WireGuard.app" ]]; then
+    printf '\n'
+    _info "WireGuard.app is installed. To reuse a tunnel from it:"
+    printf '      Open the app → Settings → "Export Tunnels" → save the .zip,\n'
+    printf '      unzip it, then choose [1] below. The export contains private\n'
+    printf '      keys — delete the unzipped files after install.\n'
+  fi
   printf '\n'
 
   printf 'What do you have?\n'
