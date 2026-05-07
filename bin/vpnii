@@ -328,10 +328,52 @@ _setup_wizard() {
 }
 
 _wizard_import() {
-  printf '\n  → Path to config: '
+  printf '\n'
+
+  # If WireGuard.app is installed, scan ~/Downloads for .conf files —
+  # the export .zip typically lands there, often inside a nested folder.
+  local found=()
+  if [[ -d /Applications/WireGuard.app || -d "$HOME/Applications/WireGuard.app" ]]; then
+    found=( "$HOME/Downloads"/**/*.conf(N.) )
+  fi
+
+  local default=""
+  if (( ${#found} == 1 )); then
+    default="${found[1]}"
+    _info "found in ~/Downloads: ${default/#$HOME/~}"
+  elif (( ${#found} > 1 )); then
+    _info "found ${#found} configs in ~/Downloads:"
+    local i=1 f
+    for f in "${found[@]}"; do
+      printf '      [%d] %s\n' "$i" "${f/#$HOME/~}"
+      (( i++ ))
+    done
+  fi
+
+  if [[ -n "$default" ]]; then
+    printf '  → Path to config [%s]: ' "${default/#$HOME/~}"
+  elif (( ${#found} > 1 )); then
+    printf '  → Path, or number from the list above: '
+  else
+    printf '  → Path to config: '
+  fi
+
   local source
   read -r source || _die "aborted"
   source="${source/#\~/$HOME}"
+
+  # Resolve: empty → default, numeric → list index, else literal path
+  if [[ -z "$source" && -n "$default" ]]; then
+    source="$default"
+  elif [[ "$source" =~ ^[0-9]+$ ]] && (( ${#found} > 0 )); then
+    local idx="$source"
+    if (( idx >= 1 && idx <= ${#found} )); then
+      source="${found[$idx]}"
+    else
+      _die "invalid index: $idx (expected 1..${#found})"
+    fi
+  fi
+
   [[ -n "$source" ]] || _die "path required"
   [[ -f "$source" ]] || _die "not found: $source"
   printf '\n'
