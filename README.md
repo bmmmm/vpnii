@@ -69,6 +69,7 @@ vpnii status            human-readable: "⬡ HomeLab" or "no active tunnels"
 vpnii clear             remove all manual state files (wg-quick unaffected)
 vpnii diag              show full vpnii status
 vpnii setup [-y] [<conf>...]   chown wireguard configs and strip stale hooks (-y skips prompts)
+vpnii export [-y] <conf> [<dir>]  read a wg config, strip hooks, write a clean copy to ~/wg/
 vpnii install [-y] <conf>      copy a clean wg config into /etc/wireguard, owned by you
 ```
 
@@ -153,6 +154,28 @@ contexts (`install.sh`, scripts).
 
 `install.sh` runs `vpnii setup` automatically at the end if `/etc/wireguard`
 already contains configs.
+
+## `vpnii export`
+
+Reads an existing wg config, strips any vpnii hooks, and writes the clean
+version into `~/wg/<name>.conf` (or a directory you pass):
+
+```zsh
+vpnii export /etc/wireguard/HomeLab.conf            # → ~/wg/HomeLab.conf
+vpnii export /etc/wireguard/HomeLab.conf ~/configs  # → ~/configs/HomeLab.conf
+```
+
+The source must be readable by you (own the file, or `vpnii setup` it
+first to take ownership). Source is left untouched. Output gets `0600`,
+target dir `0700` if newly created.
+
+Typical workflow when migrating off legacy hooks:
+
+```zsh
+vpnii export /etc/wireguard/HomeLab.conf   # extract a clean copy
+sudo rm /etc/wireguard/HomeLab.conf        # drop the dirty original
+vpnii install ~/wg/HomeLab.conf            # land the clean copy back
+```
 
 ## `vpnii install`
 

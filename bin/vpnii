@@ -12,6 +12,9 @@
 #                                   (-y / --yes auto-accepts every prompt)
 #   vpnii install [-y] <conf>       copy a clean wg config to /etc/wireguard/
 #                                   with the right ownership; checks deps
+#   vpnii export [-y] <conf> [<dir>]
+#                                   read a wg config, strip vpnii hooks, write
+#                                   the clean version to ~/wg/<name>.conf (or <dir>)
 
 set -euo pipefail
 
@@ -44,6 +47,9 @@ Tools:
                         -y/--yes auto-accepts every prompt)
   install [-y] <conf>  copy a clean wg config to /etc/wireguard/<name>.conf,
                        chown to current user; rejects configs with vpnii hooks
+  export [-y] <conf> [<dir>]
+                       read a wg config, strip vpnii hooks, write the clean
+                       version to ~/wg/<name>.conf (or <dir>); no sudo needed
 EOF
   exit 1
 }
@@ -277,28 +283,14 @@ _setup_one() {
   fi
 }
 
-# Strips known vpnii(-state) calls from PostUp/PreDown. Backup is written
-# to ~/.cache/vpnii/backups/ — placing it next to the config would require
-# write access on /etc/wireguard/, which stays root-owned.
-_strip_hooks() {
-  local conf="$1"
-  if [[ ! -w "$conf" ]]; then
-    _err "not writable — cannot strip"
-    return 1
-  fi
-
-  local backup_dir="${VPNII_CACHE_DIR}/backups"
-  mkdir -p "$backup_dir"
-  local backup="${backup_dir}/${conf:t}.$(date +%Y%m%d-%H%M%S).vpnii-bak"
-  cp "$conf" "$backup"
-  _info "backup: $backup"
-
-  local tmpfile
-  tmpfile=$(mktemp)
-  python3 - "$conf" "$tmpfile" <<'PYEOF'
+# Reads a wg config from $1, strips ALL known vpnii(-state) PostUp/PreDown
+# patterns, writes the result to $2. Source is left untouched. Heredoc keeps
+# the python regex readable; both _strip_hooks and _cmd_export call this.
+_strip_to_file() {
+  python3 - "$1" "$2" <<'PYEOF'
 import sys, re
 
-src, dst = sys.argv[1:]
+src, dst = sys.argv[1:3]
 
 # Strips ALL known vpnii state-management patterns from PostUp:
 #   old claudii: && mkdir -p ...cache/claudii && echo "X" > .../claudii/vpnii
@@ -339,7 +331,26 @@ for line in lines:
 with open(dst, 'w') as f:
     f.writelines(out)
 PYEOF
+}
 
+# Strips hooks in-place. Backup goes to ~/.cache/vpnii/backups/ because
+# /etc/wireguard/ stays root-owned (no dir-write for the user).
+_strip_hooks() {
+  local conf="$1"
+  if [[ ! -w "$conf" ]]; then
+    _err "not writable — cannot strip"
+    return 1
+  fi
+
+  local backup_dir="${VPNII_CACHE_DIR}/backups"
+  mkdir -p "$backup_dir"
+  local backup="${backup_dir}/${conf:t}.$(date +%Y%m%d-%H%M%S).vpnii-bak"
+  cp "$conf" "$backup"
+  _info "backup: $backup"
+
+  local tmpfile
+  tmpfile=$(mktemp)
+  _strip_to_file "$conf" "$tmpfile"
   cp "$tmpfile" "$conf"
   rm -f "$tmpfile"
   _ok "stripped (backup at $backup)"
@@ -408,6 +419,66 @@ _cmd_install() {
   printf 'Bring up: sudo wg-quick up %s\n' "$name"
 }
 
+# --- WireGuard config export -----------------------------------------------
+
+# Reads a wg config (typically from /etc/wireguard, user-readable when owned),
+# strips vpnii hooks, writes the clean version into ~/wg/<name>.conf (or a
+# user-supplied directory). No sudo needed. Useful for: extract a clean copy
+# you can edit and reinstall via `vpnii install`.
+_cmd_export() {
+  while (( $# > 0 )); do
+    case "$1" in
+      -y|--yes) _VPNII_ASSUME_YES=1; shift ;;
+      --) shift; break ;;
+      -*) _die "unknown export flag: $1  (try -y/--yes)" ;;
+      *)  break ;;
+    esac
+  done
+  if (( $# < 1 || $# > 2 )); then
+    _die "usage: vpnii export [-y] <wireguard-config.conf> [<dest-dir>]"
+  fi
+
+  local source="$1"
+  local dest_dir="${2:-$HOME/wg}"
+
+  [[ -f "$source" ]] || _die "not found: $source"
+  [[ -r "$source" ]] || _die "not readable: $source (the file is not yours — run 'vpnii setup' first to take ownership)"
+
+  local name="${source:t:r}"
+  local target="${dest_dir}/${name}.conf"
+
+  printf 'vpnii export: %s\n' "$source"
+  _info "tunnel name: $name"
+  _info "target: $target"
+
+  if [[ ! -d "$dest_dir" ]]; then
+    mkdir -p "$dest_dir"
+    chmod 700 "$dest_dir"
+    _ok "created $dest_dir (mode 0700)"
+  fi
+
+  if [[ -e "$target" ]]; then
+    _warn "target already exists: $target"
+    if ! _ask "Overwrite?"; then
+      _info "aborted — nothing changed"
+      return 1
+    fi
+  fi
+
+  _strip_to_file "$source" "$target"
+  chmod 600 "$target"
+
+  if grep -qE "vpnii(-state)?" "$target" 2>/dev/null; then
+    _warn "still contains vpnii references — manual review needed at $target"
+  else
+    _ok "exported clean to $target (mode 0600)"
+  fi
+
+  printf '\nNext steps:\n'
+  printf '  edit if needed: %s\n' "$target"
+  printf '  install:        vpnii install %s\n' "$target"
+}
+
 # --- Dispatcher ------------------------------------------------------------
 
 [[ $# -eq 0 ]] && _usage
@@ -422,6 +493,7 @@ case "$cmd" in
   diag)           _cmd_diag ;;
   setup)          _cmd_setup "$@" ;;
   install)        _cmd_install "$@" ;;
+  export)         _cmd_export "$@" ;;
   -h|--help|help) _usage ;;
   *)              _die "unknown command: $cmd  (try 'vpnii help')" ;;
 esac
