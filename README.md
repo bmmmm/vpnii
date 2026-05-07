@@ -68,9 +68,9 @@ vpnii list              list active tunnels (all sources, one per line)
 vpnii status            human-readable: "⬡ HomeLab" or "no active tunnels"
 vpnii clear             remove all manual state files (wg-quick unaffected)
 vpnii diag              show full vpnii status
-vpnii setup [-y] [<conf>...]   chown wireguard configs and strip stale hooks (-y skips prompts)
-vpnii export [-y] <conf> [<dir>]  read a wg config, strip hooks, write a clean copy to ~/wg/
-vpnii install [-y] <conf>      copy a clean wg config into /etc/wireguard, owned by you
+vpnii setup [-y] [<conf>...]      adaptive: maintenance for existing configs, wizard for empty
+vpnii export [-y] <conf> [<dir>]  read a wg config, strip hooks, write a clean copy (default cwd)
+vpnii install [-y] [-n NAME] <conf>   copy a clean wg config into /etc/wireguard, owned by you
 ```
 
 `up`/`down` are only needed for VPN clients that don't use wg-quick
@@ -170,32 +170,35 @@ wireguard-tools` hint if not), then offers three paths:
    VPN provider, a server admin, or a backup. Fed straight into `vpnii install`.
 2. **Paste the config inline** — for configs that arrived through email or
    chat. Asked only for a tunnel name, then accepts pasted content until
-   `EOF` or Ctrl+D. The target file `~/wg/<name>.conf` is created with
-   mode `0600` *before* the first byte is appended, so a partial paste
-   never sits at default permissions on disk.
+   `EOF` or Ctrl+D. The paste lands in a `$TMPDIR` scratch file at mode
+   `0600` (umask `077` is set globally), is handed straight to `vpnii
+   install`, and the tmpfile is wiped on function exit — nothing under
+   the user's home stays behind.
 3. **Generate fresh** — prompts for tunnel name, VPN address, server's
-   public key, endpoint, allowed IPs and optional DNS, then runs
-   `wg genkey | wg pubkey`, writes `~/wg/<name>.conf`, and prints your
-   generated public key (which you share with the server side).
+   public key, endpoint, allowed IPs and optional DNS, runs
+   `wg genkey | wg pubkey`, writes the skeleton to a `$TMPDIR` scratch
+   file, prints the generated public key (which you share with the
+   server side), and installs. Same tmpfile cleanup as paste.
 
-All three paths end with an offer to `vpnii install` the config into
-`/etc/wireguard/`.
+All three paths land the config straight at `/etc/wireguard/<name>.conf`
+with `chown user:staff`, mode `0600`. No staging directory under the
+user's home is created.
 
 `install.sh` runs `vpnii setup` automatically at the end on a fresh install.
 
 ## `vpnii export`
 
 Reads an existing wg config, strips any vpnii hooks, and writes the clean
-version into `~/wg/<name>.conf` (or a directory you pass):
+version into the current directory (or a directory you pass):
 
 ```zsh
-vpnii export /etc/wireguard/HomeLab.conf            # → ~/wg/HomeLab.conf
+vpnii export /etc/wireguard/HomeLab.conf            # → ./HomeLab.conf
 vpnii export /etc/wireguard/HomeLab.conf ~/configs  # → ~/configs/HomeLab.conf
 ```
 
 The source must be readable by you (own the file, or `vpnii setup` it
-first to take ownership). Source is left untouched. Output gets `0600`,
-target dir `0700` if newly created.
+first to take ownership). Source is left untouched. Output gets `0600`
+(via global `umask 077`); target dir `0700` if newly created.
 
 Typical workflow when migrating off legacy hooks:
 
