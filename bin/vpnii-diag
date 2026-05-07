@@ -16,14 +16,12 @@ printf '\033[1mvpnii-diag\033[0m\n'
 # --- Active tunnels ---
 _hdr "Active tunnels"
 found=0
-for f in "${VPNII_WG_DIR}"/*.name(N); do
-  [[ -f "$f" ]] || continue
+for f in "${VPNII_WG_DIR}"/*.name(N.); do
   _ok "wg-quick: ${f:t:r}  (${f})"
   found=1
 done
 if [[ -d "$VPNII_CACHE_DIR" ]]; then
-  for f in "${VPNII_CACHE_DIR}"/*(N); do
-    [[ -f "$f" ]] || continue
+  for f in "${VPNII_CACHE_DIR}"/*(N.); do
     _ok "state file: ${f:t}  (${f})"
     found=1
   done
@@ -38,27 +36,39 @@ else
   _warn "wg-quick dir not found: $VPNII_WG_DIR  (wg-quick not installed?)"
 fi
 if [[ -d "$VPNII_CACHE_DIR" ]]; then
-  local count
-  count=$(ls "$VPNII_CACHE_DIR" 2>/dev/null | wc -l | tr -d ' ')
-  _ok "state dir: $VPNII_CACHE_DIR  ($count file(s))"
+  cache_files=( "$VPNII_CACHE_DIR"/*(N.) )
+  _ok "state dir: $VPNII_CACHE_DIR  (${#cache_files} file(s))"
 else
   _warn "state dir missing: $VPNII_CACHE_DIR  (run install.sh)"
 fi
 
-# --- Binaries ---
-_hdr "Binaries"
+# --- WireGuard binaries ---
+_hdr "WireGuard binaries"
+if command -v wg-quick &>/dev/null; then
+  _ok "wg-quick: $(command -v wg-quick)"
+else
+  _warn "wg-quick not in PATH  (install wireguard-tools to bring tunnels up)"
+fi
+if command -v wg &>/dev/null; then
+  _ok "wg: $(command -v wg)"
+else
+  _warn "wg not in PATH"
+fi
+
+# --- vpnii binary ---
+_hdr "vpnii-state"
 bin="${VPNII_HOME}/bin/vpnii-state"
 if [[ -x "$bin" ]]; then
-  _ok "vpnii-state: $bin"
+  _ok "binary: $bin"
 else
-  _err "vpnii-state not found: $bin"
+  _err "binary not found: $bin"
 fi
 if [[ -L "/usr/local/bin/vpnii-state" ]]; then
   _ok "/usr/local/bin/vpnii-state → $(readlink /usr/local/bin/vpnii-state)"
 elif command -v vpnii-state &>/dev/null; then
-  _ok "vpnii-state in PATH: $(command -v vpnii-state)"
+  _ok "in PATH: $(command -v vpnii-state)"
 else
-  _warn "vpnii-state not in PATH  (add ${VPNII_HOME}/bin to PATH)"
+  _warn "not in PATH  (add ${VPNII_HOME}/bin to PATH)"
 fi
 
 # --- Shell integration ---
@@ -77,8 +87,7 @@ if [[ ! -d "$wg_dir" ]]; then
   printf '  no configs in %s\n' "$wg_dir"
 else
   any=0
-  for conf in "$wg_dir"/*.conf(N); do
-    [[ -f "$conf" ]] || continue
+  for conf in "$wg_dir"/*.conf(N.); do
     any=1
     if grep -qE "vpnii-state" "$conf" 2>/dev/null; then
       _warn "${conf:t}: has stale vpnii-state hooks (harmless, but can be cleaned)"
