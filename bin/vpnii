@@ -39,6 +39,7 @@ source "${VPNII_HOME}/lib/cmd-tunnel.zsh"
 source "${VPNII_HOME}/lib/cmd-tailscale.zsh"
 source "${VPNII_HOME}/lib/cmd-toggle.zsh"
 source "${VPNII_HOME}/lib/cmd-where.zsh"
+source "${VPNII_HOME}/lib/cmd-statusline.zsh"
 source "${VPNII_HOME}/lib/cmd-ip.zsh"
 source "${VPNII_HOME}/lib/cmd-diag.zsh"
 source "${VPNII_HOME}/lib/cmd-setup.zsh"
@@ -63,6 +64,7 @@ Tunnel state:
   reconnect <tunnel>   down + up in one step (fixes stale handshakes / DERP)
   list                 list active tunnels — one per line (excludes tailscale)
   status               human-readable: "⬡ HomeLab  ⬢ ts" / "⊖ off"
+  statusline           same as status but fixed-width (cc-statusline / tmux)
   where                show what each active tunnel routes + default route
   ip [-4 | -6]         show current external IP (sanity check after up/down)
   clear                remove all manual state files (wg-quick unaffected)
@@ -93,6 +95,7 @@ case "$cmd" in
   reconnect)      _cmd_reconnect "$@" ;;
   list)           _cmd_list ;;
   status)         _cmd_status ;;
+  statusline)     _cmd_statusline ;;
   where)          _cmd_where ;;
   ip)             _cmd_ip "$@" ;;
   clear)          _cmd_clear ;;

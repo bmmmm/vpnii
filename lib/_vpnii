@@ -12,6 +12,7 @@ _vpnii() {
     'reconnect:down + up (fix stale handshake / DERP)'
     'list:list active tunnels'
     'status:human-readable status line'
+    'statusline:fixed-width status (cc-statusline / tmux)'
     'where:show what each tunnel routes + default route'
     'ip:show current external IP'
     'clear:remove manual cache state'
