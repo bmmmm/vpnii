@@ -54,10 +54,23 @@ function _vpnii_format_age {
   fi
 }
 
-# Returns 0 if any local interface holds an IP in the Tailscale CGNAT range
-# (100.64.0.0/10 → second octet 64..127).
+# CGNAT range used by Tailscale: 100.64.0.0/10 (second octet 64..127).
+# Centralised here so detection, diag, and any future caller stay in sync.
+typeset -gr _VPNII_CGNAT_RE='inet 100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.'
+
+# Returns 0 if any local interface holds an IP in the CGNAT range.
 function _vpnii_tailscale_active {
-  ifconfig 2>/dev/null | grep -qE 'inet 100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.'
+  ifconfig 2>/dev/null | grep -qE "$_VPNII_CGNAT_RE"
+}
+
+# Echoes the first CGNAT IP found on a local interface (or empty if none).
+# Used by `vpnii diag` to surface the actual address; the active-check
+# above only needs a yes/no.
+function _vpnii_tailscale_ip {
+  ifconfig 2>/dev/null \
+    | grep -oE "${_VPNII_CGNAT_RE}[0-9]+\.[0-9]+" \
+    | head -1 \
+    | awk '{print $2}'
 }
 
 # Echoes the Tailscale account display name, or nothing if it can't be

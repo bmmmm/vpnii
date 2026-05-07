@@ -25,7 +25,7 @@ _cmd_peers() {
 
   # Tailscale: pass through the CLI's table. Sandboxed App Store build
   # can't reach the daemon, so we surface that explicitly.
-  if [[ "$name" == "$VPNII_TS_NAME" || "$name" == "tailscale" ]]; then
+  if _is_tailscale_name "$name"; then
     if ! _tailscale_cli_works; then
       _tailscale_sandboxed_die
     fi

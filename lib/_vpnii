@@ -64,9 +64,12 @@ _vpnii() {
       for f in "${VPNII_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/vpnii}"/*(N.); do
         active+=("${f:t}")
       done
-      # tailscale, only when an interface holds a CGNAT IP
+      # tailscale, only when an interface holds a CGNAT IP. The
+      # _vpnii_tailscale_active helper is sourced via vpnii.plugin.zsh
+      # before compinit runs, so it's available when this completion fires.
       if [[ "${VPNII_TS_ENABLED:-1}" == "1" ]] \
-        && ifconfig 2>/dev/null | grep -qE 'inet 100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.'; then
+        && (( ${+functions[_vpnii_tailscale_active]} )) \
+        && _vpnii_tailscale_active; then
         active+=("${VPNII_TS_NAME:-ts}")
       fi
       _describe -t tunnels 'active tunnel' active

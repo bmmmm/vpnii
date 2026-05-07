@@ -26,6 +26,13 @@ _validate_name() {
   fi
 }
 
+# Predicate for "is this name the tailscale indicator?" — matches both the
+# user-configurable VPNII_TS_NAME (default "ts") and the literal "tailscale"
+# alias so users can type either.
+_is_tailscale_name() {
+  [[ "$1" == "$VPNII_TS_NAME" || "$1" == "tailscale" ]]
+}
+
 # Picks a tunnel name from a candidate list. With one candidate, returns it
 # silently. With several, prints a numbered list and prompts; user can type
 # the index or a literal name. Result is left in REPLY for the caller.

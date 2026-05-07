@@ -11,7 +11,7 @@ _cmd_toggle() {
   local name="$1"
 
   # Tailscale special-case — use the live IP check, not file markers.
-  if [[ "$name" == "$VPNII_TS_NAME" || "$name" == "tailscale" ]]; then
+  if _is_tailscale_name "$name"; then
     if _vpnii_tailscale_active; then
       _cmd_tailscale_down
     else

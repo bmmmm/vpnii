@@ -38,9 +38,8 @@ _cmd_up() {
     name="$1"; shift
   fi
 
-  # Tailscale branch: name matches the configured TS label or the literal
-  # "tailscale". Extra args (e.g. profile) get forwarded.
-  if [[ "$name" == "$VPNII_TS_NAME" || "$name" == "tailscale" ]]; then
+  # Tailscale branch — extra args (e.g. profile) get forwarded.
+  if _is_tailscale_name "$name"; then
     _cmd_tailscale_up "$@"
     return
   fi
@@ -110,7 +109,7 @@ _cmd_down() {
   fi
 
   # Tailscale branch.
-  if [[ "$name" == "$VPNII_TS_NAME" || "$name" == "tailscale" ]]; then
+  if _is_tailscale_name "$name"; then
     _cmd_tailscale_down
     return
   fi

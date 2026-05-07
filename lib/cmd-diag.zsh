@@ -39,7 +39,7 @@ _cmd_diag() {
     _hdr "Tailscale"
     if _vpnii_tailscale_active; then
       local ts_ip ts_account
-      ts_ip=$(ifconfig 2>/dev/null | grep -oE 'inet 100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]+\.[0-9]+' | head -1 | awk '{print $2}')
+      ts_ip=$(_vpnii_tailscale_ip)
       ts_account=$(_vpnii_tailscale_account 2>/dev/null) || ts_account=""
       _ok "active: ${ts_ip:-CGNAT IP}"
       if [[ -n "$ts_account" ]]; then
