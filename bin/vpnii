@@ -40,6 +40,7 @@ source "${VPNII_HOME}/lib/cmd-tailscale.zsh"
 source "${VPNII_HOME}/lib/cmd-toggle.zsh"
 source "${VPNII_HOME}/lib/cmd-where.zsh"
 source "${VPNII_HOME}/lib/cmd-statusline.zsh"
+source "${VPNII_HOME}/lib/cmd-peers.zsh"
 source "${VPNII_HOME}/lib/cmd-ip.zsh"
 source "${VPNII_HOME}/lib/cmd-diag.zsh"
 source "${VPNII_HOME}/lib/cmd-setup.zsh"
@@ -66,6 +67,7 @@ Tunnel state:
   status               human-readable: "⬡ HomeLab  ⬢ ts" / "⊖ off"
   statusline           same as status but fixed-width (cc-statusline / tmux)
   where                show what each active tunnel routes + default route
+  peers <tunnel>       per-peer table (handshake age, endpoint, tx/rx)
   ip [-4 | -6]         show current external IP (sanity check after up/down)
   clear                remove all manual state files (wg-quick unaffected)
 
@@ -97,6 +99,7 @@ case "$cmd" in
   status)         _cmd_status ;;
   statusline)     _cmd_statusline ;;
   where)          _cmd_where ;;
+  peers)          _cmd_peers "$@" ;;
   ip)             _cmd_ip "$@" ;;
   clear)          _cmd_clear ;;
   diag)           _cmd_diag ;;

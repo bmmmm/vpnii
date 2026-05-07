@@ -14,6 +14,7 @@ _vpnii() {
     'status:human-readable status line'
     'statusline:fixed-width status (cc-statusline / tmux)'
     'where:show what each tunnel routes + default route'
+    'peers:per-peer table (handshake, endpoint, bytes)'
     'ip:show current external IP'
     'clear:remove manual cache state'
     'diag:show full vpnii status'
@@ -40,6 +41,15 @@ _vpnii() {
       # tailscale (always offered when enabled)
       [[ "${VPNII_TS_ENABLED:-1}" == "1" ]] && names+=("${VPNII_TS_NAME:-ts}")
       _describe -t tunnels 'tunnel' names
+      ;;
+    peers)
+      local -a active
+      local f
+      for f in "${VPNII_WG_DIR:-/var/run/wireguard}"/*.name(N.); do
+        active+=("${f:t:r}")
+      done
+      [[ "${VPNII_TS_ENABLED:-1}" == "1" ]] && active+=("${VPNII_TS_NAME:-ts}")
+      _describe -t tunnels 'tunnel' active
       ;;
     down)
       local -a active
