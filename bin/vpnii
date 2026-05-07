@@ -1,29 +1,8 @@
 #!/usr/bin/env zsh
-# vpnii — VPN status indicator CLI
+# vpnii — VPN status indicator + WireGuard / Tailscale CLI
 #
-# Subcommands:
-#   vpnii up [<tunnel> [<profile>]]   bring tunnel up. wg-quick if a config
-#                           exists, manual cache otherwise. tailscale (or
-#                           VPNII_TS_NAME) routes to `tailscale up`, with
-#                           an optional profile for multi-tailnet setups.
-#                           No arg = pick from /etc/wireguard.
-#   vpnii down [<tunnel>]   bring tunnel down (wg-quick / cache / tailscale).
-#                           No arg = pick from active.
-#   vpnii list              list active tunnels (all sources, one per line)
-#   vpnii status            human-readable: "⬡ HomeLab" or "no active tunnels"
-#   vpnii clear             remove all manual state files (wg-quick unaffected)
-#   vpnii diag              show full vpnii status
-#   vpnii setup [-y] [<conf>...]    interactive: chown wg configs, strip stale hooks
-#                                   (-y / --yes auto-accepts every prompt)
-#   vpnii install [-y] [-n NAME] <conf>
-#                                   copy a clean wg config to /etc/wireguard/
-#                                   with the right ownership; checks deps
-#   vpnii export [-y] <conf> [<dir>]
-#                                   read a wg config, strip vpnii hooks, write
-#                                   the clean version to <dir>/<name>.conf
-#                                   (default <dir> is the current directory)
-#
-# Implementation lives in lib/ — bin/vpnii is just the dispatcher.
+# Run `vpnii help` for the full subcommand list. Implementation lives in
+# lib/ — bin/vpnii is just the dispatcher.
 
 set -euo pipefail
 # Restrictive umask: any new file we write (config skeleton, paste target,
@@ -54,39 +33,31 @@ _usage() {
 usage: vpnii <command> [args]
 
 Tunnel state:
-  up [<tunnel> [<profile>]]
-                       bring up. With no arg: picks from /etc/wireguard configs.
-                       sudo wg-quick when a config exists; manual cache fallback.
-                       <tunnel>=tailscale (or VPNII_TS_NAME, default 'ts'):
-                       runs 'tailscale up'. <profile> picks a tailnet when more
-                       than one is configured (else prompts).
-  down [<tunnel>]      bring down. With no arg: picks from active tunnels (incl.
-                       tailscale when up). 'tailscale' runs 'tailscale down'.
-  toggle <tunnel>      flip state: up if down, down if up
-  reconnect <tunnel>   down + up in one step (fixes stale handshakes / DERP)
-  list                 list active tunnels — one per line (excludes tailscale)
-  status               human-readable: "⬡ HomeLab  ⬢ ts" / "⊖ off"
-  statusline           same as status but fixed-width (cc-statusline / tmux)
-  where                show what each active tunnel routes + default route
-  peers <tunnel>       per-peer table (handshake age, endpoint, tx/rx)
-  ip [-4 | -6]         show current external IP (sanity check after up/down)
-  clear                remove all manual state files (wg-quick unaffected)
+  up [<tunnel> [<profile>]]   bring up (wg-quick / cache / tailscale).
+                              <profile> picks a tailnet when several configured.
+  down [<tunnel>]             bring down (auto-pick from active incl. tailscale)
+  toggle <tunnel>             flip state (up if down, down if up)
+  reconnect <tunnel>          down + up (fixes stale handshakes / DERP relay)
 
-Tools:
-  diag                 show full vpnii status
-  setup [-y] [<conf>...]
-                       interactive: chown wireguard configs and strip stale hooks
-                       (no args = scan /etc/wireguard, args = specific files;
-                        -y/--yes auto-accepts every prompt)
-  install [-y] [-n NAME] <conf>
-                       copy a clean wg config to /etc/wireguard/<name>.conf,
-                       chown to current user; rejects configs with vpnii hooks
-  export [-y] <conf> [<dir>]
-                       read a wg config, strip vpnii hooks, write the clean
-                       version to <dir>/<name>.conf (default <dir>: cwd)
-  edit <tunnel>        open /etc/wireguard/<name>.conf in $EDITOR
-  verify <conf>        pre-flight a config (sections, key shapes, hooks)
-  rename <old> <new>   rename a config + cache marker (refuses if up)
+Status:
+  list                        active wg tunnels — one per line
+  status                      "⬡ HomeLab  ⬢ ts" / "⊖ off"
+  statusline                  fixed-width status (cc-statusline / tmux)
+  where                       what each tunnel routes + default route
+  peers <tunnel>              per-peer table (handshake, endpoint, bytes)
+  ip [-4 | -6]                external IP via DNS (sanity check after up/down)
+  diag                        full status (handshake age, tailscale account)
+  clear                       remove all manual state files
+
+Configs:
+  setup [-y] [<conf>...]      adaptive: maintenance / first-time wizard
+  install [-y] [-n NAME] <conf>     copy clean wg config to /etc/wireguard
+  export  [-y] <conf> [<dir>]       strip vpnii hooks, write a clean copy
+  edit <tunnel>               open /etc/wireguard/<name>.conf in $EDITOR
+  verify <conf>               pre-flight (sections, key shapes, hooks)
+  rename <old> <new>          rename config + cache marker (refuses if up)
+
+Env: VPNII_TS_NAME (default "ts"), VPNII_TS_ENABLED, VPNII_STATUSLINE_*.
 EOF
   exit 1
 }
