@@ -548,8 +548,8 @@ _setup_one() {
     _ok "owned by $USER"
   else
     _warn "owned by $owner — sudo needed for read/write"
-    if _ask "Take ownership? (sudo chown $USER:staff $conf)"; then
-      sudo chown "$USER:staff" "$conf"
+    if _ask "Take ownership? (sudo chown ${USER}:staff $conf)"; then
+      sudo chown "${USER}:staff" "$conf"
       _ok "now owned by $USER"
     else
       _info "leaving ownership as-is — further steps may need sudo"
@@ -689,8 +689,8 @@ _cmd_install() {
   # Single sudo handles dir creation (if needed) + cp + chown + chmod under
   # one `set -e` shell. -p preserves the source mode (0600), and the bundle
   # means a Ctrl+C between steps can't leave the target half-owned by root.
-  _info "sudo: install + chown to $USER:staff"
-  sudo sh -s "$source" "$target" "$USER:staff" <<'SUDO_BLOCK'
+  _info "sudo: install + chown to ${USER}:staff"
+  sudo sh -s "$source" "$target" "${USER}:staff" <<'SUDO_BLOCK'
 set -e
 src="$1"; dst="$2"; owner="$3"
 parent="$(dirname "$dst")"
