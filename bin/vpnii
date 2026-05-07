@@ -35,6 +35,7 @@ source "${VPNII_HOME}/lib/strip.zsh"
 source "${VPNII_HOME}/lib/cmd-tunnel.zsh"
 source "${VPNII_HOME}/lib/cmd-diag.zsh"
 source "${VPNII_HOME}/lib/cmd-setup.zsh"
+source "${VPNII_HOME}/lib/cmd-wizard.zsh"
 source "${VPNII_HOME}/lib/cmd-install.zsh"
 source "${VPNII_HOME}/lib/cmd-export.zsh"
 

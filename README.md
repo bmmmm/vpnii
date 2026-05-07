@@ -252,10 +252,32 @@ vpnii clear
 |------|---------|
 | `vpnii.plugin.zsh` | oh-my-zsh entry point — sources `lib/vpnii.zsh` |
 | `lib/vpnii.zsh` | Detection logic, `_vpnii_precmd` hook, public `vpnii_active_tunnels` API |
-| `bin/vpnii` | CLI dispatcher — all subcommands |
+| `lib/ui.zsh` | UI primitives (printing, prompts, name validation) |
+| `lib/strip.zsh` | `_strip_to_file` — removes vpnii hooks from PostUp/PreDown lines |
+| `lib/cmd-*.zsh` | Per-subcommand modules: tunnel, diag, setup, wizard, install, export |
+| `bin/vpnii` | CLI dispatcher — sources lib modules, routes subcommands |
+| `tests/run.zsh` | Test runner — pure-zsh, no deps |
 | `install.sh` / `uninstall.sh` | Adds/removes the source line in `~/.zshrc` and the PATH entry |
 | `/var/run/wireguard/<name>.name` | wg-quick's tunnel marker (read-only, system-managed) |
 | `~/.cache/vpnii/<name>` | Manual state file — one empty file per active tunnel |
+
+## Tests
+
+```zsh
+./tests/run.zsh
+```
+
+Pure-zsh harness, no dependencies. Covers:
+- `_strip_to_file` against fixture matrix (clean, foreign hooks, claudii
+  legacy, su-c form, sudo-u form, vpnii-state binary)
+- Detection dedup (`_vpnii_collect_tunnels`, `vpnii_active_tunnels`)
+- CLI smoke paths (help, status, list, clear, name validation)
+
+To run tests automatically before each push, opt into the bundled hook:
+
+```zsh
+git config core.hooksPath .githooks
+```
 
 ## Roadmap
 

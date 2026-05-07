@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Block push if tests fail.
+# Enable with: git config core.hooksPath .githooks
+exec ./tests/run.zsh
