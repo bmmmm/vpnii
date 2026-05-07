@@ -216,7 +216,6 @@ _ask() {
 }
 
 _cmd_setup() {
-  local configs=()
   while (( $# > 0 )); do
     case "$1" in
       -y|--yes) _VPNII_ASSUME_YES=1; shift ;;
@@ -225,19 +224,29 @@ _cmd_setup() {
       *)  break ;;
     esac
   done
-  if (( $# == 0 )); then
-    configs=( /etc/wireguard/*.conf(N.) )
-    if (( ${#configs} == 0 )); then
-      printf 'vpnii setup: no wireguard configs in /etc/wireguard\n'
-      return 0
-    fi
-  else
-    configs=( "$@" )
+
+  # Explicit configs given → maintenance on those, no auto-detection.
+  if (( $# > 0 )); then
+    _setup_maintenance "$@"
+    return
   fi
 
-  printf 'vpnii setup — %d config(s) to check\n' "${#configs}"
+  # No args → adaptive: maintenance if /etc/wireguard has configs, wizard if empty.
+  local configs=()
+  if [[ -d /etc/wireguard ]]; then
+    configs=( /etc/wireguard/*.conf(N.) )
+  fi
+  if (( ${#configs} == 0 )); then
+    _setup_wizard
+  else
+    _setup_maintenance "${configs[@]}"
+  fi
+}
+
+_setup_maintenance() {
+  printf 'vpnii setup — %d config(s) to check\n' "$#"
   local conf
-  for conf in "${configs[@]}"; do
+  for conf in "$@"; do
     if [[ ! -e "$conf" ]]; then
       _warn "$conf not found, skipping"
       continue
@@ -245,6 +254,109 @@ _cmd_setup() {
     _setup_one "$conf"
   done
   printf '\n'
+}
+
+# First-time wizard: triggered when /etc/wireguard is empty/missing.
+# Default path is to import an existing wg config — that's how most people
+# arrive (config from a VPN provider, a server admin, an old machine).
+# If they don't have one, the wizard falls back to generating a fresh
+# keypair + skeleton, but that's the assist path, not the main one.
+_setup_wizard() {
+  printf 'vpnii setup — first-time wizard (no configs in /etc/wireguard)\n\n'
+
+  command -v wg-quick &>/dev/null || _die "wg-quick not found  (install with: brew install wireguard-tools)"
+  command -v wg       &>/dev/null || _die "wg not found  (install with: brew install wireguard-tools)"
+  _ok "wg-quick: $(command -v wg-quick)"
+  _ok "wg:       $(command -v wg)"
+  printf '\n'
+
+  printf 'If you have a wg config from your VPN provider or a server admin,\n'
+  printf 'paste its path. Otherwise leave blank and vpnii will help you\n'
+  printf 'generate a fresh keypair and skeleton config.\n\n'
+  printf '  → Path to existing config (blank = generate new): '
+
+  local source
+  read -r source || _die "aborted"
+  source="${source/#\~/$HOME}"
+
+  if [[ -z "$source" ]]; then
+    _wizard_generate
+  else
+    [[ -f "$source" ]] || _die "not found: $source"
+    printf '\n'
+    _cmd_install "$source"
+  fi
+}
+
+# Generates a fresh wg keypair, prompts for peer info, writes the config to
+# ~/wg/<name>.conf, prints the public key, then offers to install it.
+_wizard_generate() {
+  printf '\n'
+
+  local name address peer_pubkey peer_endpoint peer_allowed dns
+
+  printf '  → Tunnel name (e.g. HomeLab): '
+  read -r name || _die "aborted"
+  [[ -n "$name" ]] || _die "tunnel name required"
+  [[ "$name" == */* || "$name" == .* ]] && _die "invalid tunnel name: $name"
+
+  printf '  → Your VPN address with mask (e.g. 192.168.189.100/24): '
+  read -r address || _die "aborted"
+  [[ -n "$address" ]] || _die "address required"
+
+  printf '  → Server public key: '
+  read -r peer_pubkey || _die "aborted"
+  [[ -n "$peer_pubkey" ]] || _die "server public key required"
+
+  printf '  → Server endpoint (host:port): '
+  read -r peer_endpoint || _die "aborted"
+  [[ -n "$peer_endpoint" ]] || _die "endpoint required"
+
+  printf '  → Allowed IPs [0.0.0.0/0]: '
+  read -r peer_allowed || _die "aborted"
+  : "${peer_allowed:=0.0.0.0/0}"
+
+  printf '  → DNS (optional, blank to skip): '
+  read -r dns || _die "aborted"
+
+  local privkey pubkey
+  privkey=$(wg genkey)
+  pubkey=$(printf '%s' "$privkey" | wg pubkey)
+
+  local wg_dir="$HOME/wg"
+  mkdir -p "$wg_dir"
+  chmod 700 "$wg_dir"
+  local conf="$wg_dir/${name}.conf"
+
+  if [[ -e "$conf" ]]; then
+    _warn "$conf already exists"
+    _ask "Overwrite?" || _die "aborted"
+  fi
+
+  {
+    printf '[Interface]\n'
+    printf 'PrivateKey = %s\n' "$privkey"
+    printf 'Address    = %s\n' "$address"
+    [[ -n "$dns" ]] && printf 'DNS        = %s\n' "$dns"
+    printf '\n[Peer]\n'
+    printf 'PublicKey           = %s\n' "$peer_pubkey"
+    printf 'Endpoint            = %s\n' "$peer_endpoint"
+    printf 'AllowedIPs          = %s\n' "$peer_allowed"
+    printf 'PersistentKeepalive = 25\n'
+  } > "$conf"
+  chmod 600 "$conf"
+
+  printf '\n'
+  _ok "wrote $conf (mode 0600)"
+  printf '\n\033[1mYour public key — paste on the server side:\033[0m\n'
+  printf '  %s\n\n' "$pubkey"
+
+  if _ask "Install to /etc/wireguard now?"; then
+    printf '\n'
+    _cmd_install "$conf"
+  else
+    printf '\nLater: vpnii install %s\n' "$conf"
+  fi
 }
 
 _setup_one() {

@@ -131,7 +131,12 @@ Output sections:
 
 ## `vpnii setup`
 
-Interactive helper that brings each wireguard config into a sudo-free state:
+Adaptive: behaves differently depending on whether `/etc/wireguard` already
+has configs.
+
+### Maintenance mode
+
+When configs exist, setup brings each one into a sudo-free state:
 
 ```zsh
 vpnii setup            # scan all configs in /etc/wireguard
@@ -152,8 +157,24 @@ Per config, it offers two operations:
 Pass `-y` / `--yes` to auto-accept every prompt — useful from non-interactive
 contexts (`install.sh`, scripts).
 
-`install.sh` runs `vpnii setup` automatically at the end if `/etc/wireguard`
-already contains configs.
+### First-time wizard
+
+When `/etc/wireguard` is empty or missing, `vpnii setup` (no args) starts a
+wizard. It checks `wg`/`wg-quick` are installed (with a `brew install
+wireguard-tools` hint if not), then asks for a path to an existing wg
+config. **Import is the default path** — most people arrive at vpnii
+already holding a config from a VPN provider, a server admin, or another
+machine. The path is fed into `vpnii install`, which lands it in
+`/etc/wireguard/<name>.conf` with the right ownership.
+
+If you leave the path blank, the wizard falls back to **generate mode**:
+prompts for tunnel name, your VPN address, the server's public key,
+endpoint, allowed IPs and optional DNS, then runs `wg genkey | wg pubkey`,
+writes the result to `~/wg/<name>.conf`, and prints your generated public
+key (which you'll need to share with the server side). It then offers to
+install the new config.
+
+`install.sh` runs `vpnii setup` automatically at the end on a fresh install.
 
 ## `vpnii export`
 

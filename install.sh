@@ -1,6 +1,7 @@
 #!/usr/bin/env zsh
 # vpnii install — adds vpnii to ~/.zshrc, links the `vpnii` CLI on PATH, and
-# offers interactive `vpnii setup` for any existing /etc/wireguard configs.
+# offers interactive `vpnii setup` (maintenance for existing configs, or
+# first-time wizard for greenfield installs).
 
 set -euo pipefail
 
@@ -47,15 +48,23 @@ fi
 printf '\n'
 _green "Done. Open a new shell or: source $ZSHRC"
 
-# 3. Interactive wireguard config setup — chown to current user + strip
-# stale hooks. Skipped silently if no configs exist or stdin isn't a tty.
-configs=( /etc/wireguard/*.conf(N.) )
-if (( ${#configs} > 0 )) && [[ -t 0 ]]; then
+# 3. Interactive wg setup. With existing configs: maintenance (chown + strip).
+# With empty/missing /etc/wireguard: wizard (import or generate). Skipped
+# silently if stdin isn't a tty.
+if [[ -t 0 ]]; then
+  configs=()
+  [[ -d /etc/wireguard ]] && configs=( /etc/wireguard/*.conf(N.) )
+
   printf '\n'
-  _bold "WireGuard configs"
-  printf 'Found %d config(s) in /etc/wireguard.\n' "${#configs}"
-  printf 'vpnii setup takes ownership (so you can edit without sudo) and strips\n'
-  printf 'any legacy vpnii hooks left over from older installs.\n\n'
+  _bold "WireGuard setup"
+  if (( ${#configs} > 0 )); then
+    printf 'Found %d config(s) in /etc/wireguard.\n' "${#configs}"
+    printf 'vpnii setup takes ownership (so you can edit without sudo) and strips\n'
+    printf 'any legacy vpnii hooks left over from older installs.\n\n'
+  else
+    printf 'No configs in /etc/wireguard yet. vpnii setup can import an existing\n'
+    printf 'wg config or help you generate a new keypair plus skeleton.\n\n'
+  fi
   printf 'Run interactive setup now? [Y/n] '
   read -r answer
   if [[ "${answer:l}" != "n" ]]; then
