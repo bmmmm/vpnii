@@ -2,10 +2,10 @@
 # vpnii — VPN status indicator CLI
 #
 # Subcommands:
-#   vpnii up <tunnel>       bring tunnel up (sudo wg-quick if a config exists,
-#                           manual cache otherwise)
-#   vpnii down <tunnel>     bring tunnel down (sudo wg-quick if managed,
-#                           clears manual cache otherwise)
+#   vpnii up [<tunnel>]     bring tunnel up (sudo wg-quick if a config exists,
+#                           manual cache otherwise; no arg = pick from configs)
+#   vpnii down [<tunnel>]   bring tunnel down (sudo wg-quick if managed,
+#                           clears manual cache otherwise; no arg = pick from active)
 #   vpnii list              list active tunnels (all sources, one per line)
 #   vpnii status            human-readable: "⬡ HomeLab" or "no active tunnels"
 #   vpnii clear             remove all manual state files (wg-quick unaffected)
@@ -43,10 +43,11 @@ _usage() {
 usage: vpnii <command> [args]
 
 Tunnel state:
-  up <tunnel>          bring up: sudo wg-quick up if /etc/wireguard/<tunnel>.conf
-                       exists, otherwise mark active in the manual cache
-  down <tunnel>        bring down: sudo wg-quick down if managed by wg-quick,
-                       otherwise clear the manual cache entry
+  up [<tunnel>]        bring up. With no arg: picks from /etc/wireguard configs
+                       (auto-selects when only one). sudo wg-quick if a config
+                       exists; manual cache fallback otherwise.
+  down [<tunnel>]      bring down. With no arg: picks from active tunnels.
+                       sudo wg-quick if managed; clears manual cache otherwise.
   list                 list active tunnels — one per line, all sources
   status               human-readable: "⬡ HomeLab" or "no active tunnels"
   clear                remove all manual state files (wg-quick unaffected)
@@ -75,33 +76,91 @@ _validate_name() {
 
 # --- Tunnel state ----------------------------------------------------------
 
+# Picks a tunnel name from a candidate list. With one candidate, returns it
+# silently. With several, prints a numbered list and prompts; user can type
+# the index or a literal name. Result is left in REPLY for the caller.
+_pick_one() {
+  local label="$1"; shift
+  local -a candidates=("$@")
+  if (( ${#candidates} == 0 )); then
+    REPLY=""
+    return 1
+  fi
+  if (( ${#candidates} == 1 )); then
+    REPLY="${candidates[1]}"
+    return 0
+  fi
+  printf '%s:\n' "$label"
+  local i=1 c
+  for c in "${candidates[@]}"; do
+    printf '  [%d] %s\n' "$i" "$c"
+    (( i++ ))
+  done
+  printf '\n  → Pick a number or type a name: '
+  local pick
+  read -r pick || { REPLY=""; return 1; }
+  if [[ "$pick" =~ ^[0-9]+$ ]] && (( pick >= 1 && pick <= ${#candidates} )); then
+    REPLY="${candidates[$pick]}"
+  else
+    REPLY="$pick"
+  fi
+  return 0
+}
+
 _cmd_up() {
-  [[ $# -eq 1 ]] || _die "up requires a tunnel name"
-  _validate_name "$1"
-  local name="$1"
+  local name=""
+  if (( $# == 0 )); then
+    local configs=( /etc/wireguard/*.conf(N.) )
+    local -a names=()
+    local c
+    for c in "${configs[@]}"; do names+=("${c:t:r}"); done
+    if (( ${#names} == 0 )); then
+      _die "no wg-quick configs in /etc/wireguard  (run: vpnii setup)"
+    fi
+    _pick_one "Available tunnels" "${names[@]}" || _die "aborted"
+    name="$REPLY"
+  else
+    [[ $# -eq 1 ]] || _die "up takes at most one tunnel name"
+    name="$1"
+  fi
+  _validate_name "$name"
   local conf="/etc/wireguard/${name}.conf"
 
   # If a wg-quick config exists, this is a wg-quick tunnel — bring it up.
   if [[ -f "$conf" ]]; then
     if [[ -f "${VPNII_WG_DIR}/${name}.name" ]]; then
-      printf 'vpnii: %s is already up\n' "$name" >&2
+      _info "$name is already up"
       return 0
     fi
     command -v wg-quick &>/dev/null || _die "wg-quick not found  (install with: brew install wireguard-tools)"
     _info "sudo wg-quick up $name"
     sudo wg-quick up "$name"
+    printf '\n'
+    _ok "tunnel up: $name"
     return
   fi
 
   # Otherwise: manual cache state for non-wg-quick VPN clients.
   mkdir -p "$VPNII_CACHE_DIR"
   touch "${VPNII_CACHE_DIR}/${name}"
+  _ok "marked active in cache: $name"
 }
 
 _cmd_down() {
-  [[ $# -eq 1 ]] || _die "down requires a tunnel name"
-  _validate_name "$1"
-  local name="$1"
+  local name=""
+  if (( $# == 0 )); then
+    local -a active=( ${(f)"$(vpnii_active_tunnels 2>/dev/null)"} )
+    if (( ${#active} == 0 )); then
+      _info "no active tunnels"
+      return 0
+    fi
+    _pick_one "Active tunnels" "${active[@]}" || _die "aborted"
+    name="$REPLY"
+  else
+    [[ $# -eq 1 ]] || _die "down takes at most one tunnel name"
+    name="$1"
+  fi
+  _validate_name "$name"
   local cache_file="${VPNII_CACHE_DIR}/${name}"
   local wg_marker="${VPNII_WG_DIR}/${name}.name"
   local conf="/etc/wireguard/${name}.conf"
@@ -111,11 +170,16 @@ _cmd_down() {
     command -v wg-quick &>/dev/null || _die "wg-quick not found  (install with: brew install wireguard-tools)"
     _info "sudo wg-quick down $name"
     sudo wg-quick down "$name"
+    printf '\n'
+    _ok "tunnel down: $name"
     return
   fi
 
   # Manual cache: remove if present, otherwise idempotent no-op.
-  [[ -f "$cache_file" ]] && rm -f "$cache_file"
+  if [[ -f "$cache_file" ]]; then
+    rm -f "$cache_file"
+    _ok "cleared cache: $name"
+  fi
 }
 
 _cmd_list() {
