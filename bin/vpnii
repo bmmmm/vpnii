@@ -28,6 +28,7 @@ umask 077
 
 VPNII_HOME="${0:A:h:h}"
 source "${VPNII_HOME}/lib/vpnii.zsh"
+source "${VPNII_HOME}/lib/strip.zsh"
 
 _die()   { printf 'vpnii: %s\n' "$*" >&2; exit 1; }
 _info()  { printf '  → %s\n' "$*"; }
@@ -645,56 +646,6 @@ _setup_one() {
   else
     _ok "no stale vpnii hooks"
   fi
-}
-
-# Reads a wg config from $1, strips ALL known vpnii(-state) PostUp/PreDown
-# patterns, writes the result to $2. Source is left untouched. Heredoc keeps
-# the python regex readable; both _strip_hooks and _cmd_export call this.
-_strip_to_file() {
-  python3 - "$1" "$2" <<'PYEOF'
-import sys, re
-
-src, dst = sys.argv[1:3]
-
-# Strips ALL known vpnii state-management patterns from PostUp:
-#   old claudii: && mkdir -p ...cache/claudii && echo "X" > .../claudii/vpnii
-#   su -c form:  && su -c 'vpnii(-state) ...' - $SUDO_USER
-#   sudo form:   && sudo -u $SUDO_USER /path/vpnii(-state) up <name>
-STRIP_POSTUP = re.compile(
-    r'\s*&&\s*(?:'
-    r'mkdir\s+-p\s+\S*\.cache\S*\s*&&\s*echo\s+"[^"]*"\s*>\s*\S*/vpnii'
-    r"|su\s+-c\s+'vpnii(?:-state)?[^']*'\s+-\s+\S+"
-    r'|sudo\s+-u\s+\S+\s+\S*vpnii(?:-state)?\s+\S+\s+\S+'
-    r')'
-)
-
-# Strips ALL known vpnii state-management patterns from PreDown:
-#   old claudii path: /path/.cache/claudii/vpnii
-#   su -c form:       && su -c 'vpnii(-state) ...' - $SUDO_USER
-#   sudo form:        && sudo -u $SUDO_USER /path/vpnii(-state) down <name>
-STRIP_PREDOWN = re.compile(
-    r'(?:'
-    r'\s+\S+/\.cache\S*/vpnii\b'
-    r"|su\s+-c\s+'vpnii(?:-state)?[^']*'\s+-\s+\S+"
-    r'|\s*&&\s*sudo\s+-u\s+\S+\s+\S*vpnii(?:-state)?\s+\S+\s+\S+'
-    r')'
-)
-
-with open(src) as f:
-    lines = f.readlines()
-
-out = []
-for line in lines:
-    if re.match(r'^PostUp\s*=', line):
-        out.append(STRIP_POSTUP.sub('', line.rstrip('\n')) + '\n')
-    elif re.match(r'^PreDown\s*=', line):
-        out.append(STRIP_PREDOWN.sub('', line.rstrip('\n')) + '\n')
-    else:
-        out.append(line)
-
-with open(dst, 'w') as f:
-    f.writelines(out)
-PYEOF
 }
 
 # Strips hooks in-place via a $TMPDIR scratch file. No disk backup is
