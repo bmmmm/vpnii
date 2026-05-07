@@ -8,7 +8,8 @@
 #   vpnii status            human-readable: "⬡ HomeLab" or "no active tunnels"
 #   vpnii clear             remove all manual state files (wg-quick unaffected)
 #   vpnii diag              show full vpnii status
-#   vpnii setup [<conf>]    interactive: chown wg configs to user, strip stale hooks
+#   vpnii setup [-y] [<conf>...]    interactive: chown wg configs, strip stale hooks
+#                                   (-y / --yes auto-accepts every prompt)
 
 set -euo pipefail
 
@@ -35,8 +36,10 @@ Tunnel state:
 
 Tools:
   diag                 show full vpnii status
-  setup [<conf>...]    interactive: chown wireguard configs and strip stale hooks
-                       (no args = scan /etc/wireguard, args = specific files)
+  setup [-y] [<conf>...]
+                       interactive: chown wireguard configs and strip stale hooks
+                       (no args = scan /etc/wireguard, args = specific files;
+                        -y/--yes auto-accepts every prompt)
 EOF
   exit 1
 }
@@ -187,13 +190,20 @@ _cmd_diag() {
 
 # --- WireGuard config setup (chown + strip stale hooks) --------------------
 
-# Interactive yes/no prompt. Defaults to yes; non-interactive (closed stdin)
-# returns no so unattended runs don't make destructive guesses.
+typeset -g _VPNII_ASSUME_YES=0
+
+# Interactive yes/no prompt. Defaults to yes (Enter); non-interactive (closed
+# stdin) returns no unless --yes was passed, so unattended runs don't make
+# destructive guesses by accident.
 _ask() {
   local prompt="$1" answer
+  if (( _VPNII_ASSUME_YES )); then
+    printf '  → %s [Y/n] yes (--yes)\n' "$prompt"
+    return 0
+  fi
   printf '  → %s [Y/n] ' "$prompt"
   if ! read -r answer; then
-    printf 'no (no tty)\n' >&2
+    printf 'no (no tty — pass --yes to auto-accept)\n' >&2
     return 1
   fi
   [[ "${answer:l}" != "n" ]]
@@ -201,6 +211,14 @@ _ask() {
 
 _cmd_setup() {
   local configs=()
+  while (( $# > 0 )); do
+    case "$1" in
+      -y|--yes) _VPNII_ASSUME_YES=1; shift ;;
+      --) shift; break ;;
+      -*) _die "unknown setup flag: $1  (try -y/--yes)" ;;
+      *)  break ;;
+    esac
+  done
   if (( $# == 0 )); then
     configs=( /etc/wireguard/*.conf(N.) )
     if (( ${#configs} == 0 )); then
@@ -259,7 +277,9 @@ _setup_one() {
   fi
 }
 
-# Strips known vpnii(-state) calls from PostUp/PreDown. Backup on the side.
+# Strips known vpnii(-state) calls from PostUp/PreDown. Backup is written
+# to ~/.cache/vpnii/backups/ — placing it next to the config would require
+# write access on /etc/wireguard/, which stays root-owned.
 _strip_hooks() {
   local conf="$1"
   if [[ ! -w "$conf" ]]; then
@@ -267,7 +287,9 @@ _strip_hooks() {
     return 1
   fi
 
-  local backup="${conf}.vpnii-bak"
+  local backup_dir="${VPNII_CACHE_DIR}/backups"
+  mkdir -p "$backup_dir"
+  local backup="${backup_dir}/${conf:t}.$(date +%Y%m%d-%H%M%S).vpnii-bak"
   cp "$conf" "$backup"
   _info "backup: $backup"
 

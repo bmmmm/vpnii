@@ -68,7 +68,7 @@ vpnii list              list active tunnels (all sources, one per line)
 vpnii status            human-readable: "⬡ HomeLab" or "no active tunnels"
 vpnii clear             remove all manual state files (wg-quick unaffected)
 vpnii diag              show full vpnii status
-vpnii setup [<conf>...] interactive: chown wireguard configs and strip stale hooks
+vpnii setup [-y] [<conf>...]   chown wireguard configs and strip stale hooks (-y skips prompts)
 ```
 
 `up`/`down` are only needed for VPN clients that don't use wg-quick
@@ -143,8 +143,12 @@ Per config, it offers two operations:
    clean the file without root. wg-quick continues to work because
    wg-quick itself runs as root and reads the file regardless of owner.
 2. **Strip legacy hooks** — removes any `vpnii-state up/down` calls from
-   `PostUp`/`PreDown` left over from older versions. A `.vpnii-bak`
-   backup is written next to the config.
+   `PostUp`/`PreDown` left over from older versions. A timestamped backup
+   is written to `~/.cache/vpnii/backups/` (the parent directory
+   `/etc/wireguard/` stays root-owned and write-locked).
+
+Pass `-y` / `--yes` to auto-accept every prompt — useful from non-interactive
+contexts (`install.sh`, scripts).
 
 `install.sh` runs `vpnii setup` automatically at the end if `/etc/wireguard`
 already contains configs.
