@@ -110,6 +110,9 @@ _pick_one() {
 _cmd_up() {
   local name=""
   if (( $# == 0 )); then
+    if [[ -d /etc/wireguard && ! -r /etc/wireguard ]]; then
+      _die "/etc/wireguard isn't readable as $USER  (run: sudo chown $USER /etc/wireguard)"
+    fi
     local configs=( /etc/wireguard/*.conf(N.) )
     local -a names=()
     local c
@@ -348,6 +351,21 @@ _cmd_setup() {
 }
 
 _setup_maintenance() {
+  # Make sure the directory itself is user-owned so glob/listing works
+  # without sudo. This is a one-time fix for installs that pre-date the
+  # dir-chown in _cmd_install.
+  if [[ -d /etc/wireguard ]]; then
+    local dir_owner
+    dir_owner=$(stat -f '%Su' /etc/wireguard 2>/dev/null || stat -c '%U' /etc/wireguard 2>/dev/null || echo '?')
+    if [[ "$dir_owner" != "$USER" ]]; then
+      _warn "/etc/wireguard owned by $dir_owner — sudo needed to list"
+      if _ask "Take ownership of the directory? (sudo chown $USER /etc/wireguard)"; then
+        sudo chown "$USER" /etc/wireguard
+        _ok "now owned by $USER"
+      fi
+    fi
+  fi
+
   printf 'vpnii setup — %d config(s) to check\n' "$#"
   local conf
   for conf in "$@"; do
@@ -752,8 +770,9 @@ _cmd_install() {
   fi
 
   # Single sudo handles dir creation (if needed) + cp + chown + chmod under
-  # one `set -e` shell. -p preserves the source mode (0600), and the bundle
-  # means a Ctrl+C between steps can't leave the target half-owned by root.
+  # one `set -e` shell. -p preserves the source mode (0600). The bundle also
+  # chowns the *directory* to the user so future ops (listing, vpnii up
+  # without args, manual edits) don't need sudo.
   _info "sudo: install + chown to ${USER}:staff"
   sudo sh -s "$source" "$target" "${USER}:staff" <<'SUDO_BLOCK'
 set -e
@@ -761,8 +780,9 @@ src="$1"; dst="$2"; owner="$3"
 parent="$(dirname "$dst")"
 if [ ! -d "$parent" ]; then
   mkdir -p "$parent"
-  chmod 700 "$parent"
 fi
+chown "$owner" "$parent"
+chmod 700 "$parent"
 cp -p "$src" "$dst"
 chown "$owner" "$dst"
 chmod 600 "$dst"
