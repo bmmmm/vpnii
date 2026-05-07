@@ -270,10 +270,19 @@ _setup_wizard() {
   _ok "wg-quick: $(command -v wg-quick)"
   _ok "wg:       $(command -v wg)"
 
-  # If a tunnel is already up, warn before letting the user create another.
-  # The detection here is the same one used for the prompt indicator —
-  # /var/run/wireguard/*.name plus the manual cache dir.
+  # Two-source check for already-running tunnels: .name files (wg-quick's
+  # convention, no sudo needed) plus `wg show interfaces` (catches raw wg
+  # setups that bypass wg-quick; needs sudo on macOS, silent fail otherwise).
   local active=( ${(f)"$(vpnii_active_tunnels 2>/dev/null)"} )
+  local wg_ifs
+  wg_ifs=$(wg show interfaces 2>/dev/null) || wg_ifs=""
+  if [[ -n "$wg_ifs" ]]; then
+    local iface
+    for iface in ${(s: :)wg_ifs}; do
+      (( ${active[(I)$iface]} )) || active+=("$iface")
+    done
+  fi
+
   if (( ${#active} > 0 )); then
     printf '\n'
     _warn "wg is already running — active tunnel(s):"
@@ -284,6 +293,8 @@ _setup_wizard() {
       _info "aborted — tear the tunnel down first if you want a clean slate"
       return 0
     fi
+  else
+    _ok "no active tunnels (checked .name files and wg show)"
   fi
   printf '\n'
 
