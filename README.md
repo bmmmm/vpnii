@@ -16,8 +16,12 @@ vpnii detects active tunnels from system state — no hooks, no elevated privile
 |--------|-----------|
 | `/var/run/wireguard/<name>.name` | wg-quick on macOS (automatic) |
 | `~/.cache/vpnii/<name>` | Passepartout, other VPN tools, manual use |
+| Tailscale CGNAT IP (`100.64.0.0/10`) | Tailscale, OSS or Mac App Store build |
 
 wg-quick creates and removes the `.name` file automatically when tunnels go up/down.
+Tailscale detection works for the App Store build too — `tailscale status` fails
+there because the CLI is sandboxed off from the daemon, but `ifconfig` always sees
+the tunnel address. Disable with `VPNII_TS_ENABLED=0`; rename with `VPNII_TS_NAME`.
 
 ## Install
 
@@ -100,6 +104,8 @@ Set these before sourcing vpnii:
 | `VPNII_CLR_ACTIVE` | `%F{green}` | zsh prompt color |
 | `VPNII_CLR_RESET` | `%f` | zsh prompt reset |
 | `VPNII_ENABLED` | `1` | Set to `0` to disable |
+| `VPNII_TS_ENABLED` | `1` | Set to `0` to skip tailscale detection |
+| `VPNII_TS_NAME` | `tailscale` | Label shown when tailscale is up |
 
 ## Public API
 
@@ -282,5 +288,4 @@ git config core.hooksPath .githooks
 ## Roadmap
 
 - [ ] macOS menu bar indicator (SwiftBar/xbar plugin)
-- [ ] Tailscale support
 - [ ] Homebrew tap

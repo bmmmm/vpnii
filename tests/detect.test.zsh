@@ -5,6 +5,7 @@
 tmpdir=$(mktemp -d)
 export VPNII_WG_DIR="${tmpdir}/wg"
 export VPNII_CACHE_DIR="${tmpdir}/cache"
+export VPNII_TS_ENABLED=0  # suppress ambient tailscale; covered separately
 mkdir -p "$VPNII_WG_DIR" "$VPNII_CACHE_DIR"
 
 source "${VPNII_HOME}/lib/vpnii.zsh"

@@ -4,15 +4,30 @@
 # Detection (in order):
 #   1. /var/run/wireguard/<name>.name  — wg-quick on macOS, zero config, zero elevation
 #   2. $VPNII_CACHE_DIR/<name>         — manual state files (Passepartout, other VPN tools)
+#   3. tailscale CGNAT IP (100.64/10)  — works for OSS CLI and App Store builds
+#                                        (the App Store CLI can't talk to the daemon
+#                                        from outside the sandbox, but ifconfig can)
 
 : "${VPNII_CACHE_DIR:=${XDG_CACHE_HOME:-$HOME/.cache}/vpnii}"
 : "${VPNII_WG_DIR:=/var/run/wireguard}"
 : "${VPNII_SYM_VPN:=⬡}"
+: "${VPNII_TS_ENABLED:=1}"
+: "${VPNII_TS_NAME:=tailscale}"
 (( ${+VPNII_CLR_ACTIVE} )) || VPNII_CLR_ACTIVE='%F{green}'
 (( ${+VPNII_CLR_RESET} ))  || VPNII_CLR_RESET='%f'
 
+# Returns 0 if any local interface holds an IP in the Tailscale CGNAT range
+# (100.64.0.0/10 → second octet 64..127). Works for both the OSS CLI install
+# and the App Store sandboxed build, where `tailscale status` fails because
+# the CLI can't reach the daemon's socket.
+function _vpnii_tailscale_active {
+  ifconfig 2>/dev/null | grep -qE 'inet 100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.'
+}
+
 # Populates `reply` (zsh convention) with active tunnel names, deduplicated.
-# wg-quick names take precedence over cache entries with the same name.
+# wg-quick names take precedence over cache entries with the same name;
+# tailscale appears last (ambient mesh, conceptually distinct from explicit
+# tunnels but sharing the same indicator).
 function _vpnii_collect_tunnels {
   local f name
   local -A seen
@@ -29,6 +44,11 @@ function _vpnii_collect_tunnels {
     seen[$name]=1
     reply+=("$name")
   done
+  if [[ "$VPNII_TS_ENABLED" == "1" ]] && (( ! ${+seen[$VPNII_TS_NAME]} )); then
+    if _vpnii_tailscale_active; then
+      reply+=("$VPNII_TS_NAME")
+    fi
+  fi
 }
 
 # Public API: print active tunnel names, one per line; exit 1 if none.

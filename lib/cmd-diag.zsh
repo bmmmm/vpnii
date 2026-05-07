@@ -18,6 +18,12 @@ _cmd_diag() {
       found=1
     done
   fi
+  if [[ "$VPNII_TS_ENABLED" == "1" ]] && _vpnii_tailscale_active; then
+    local ts_ip
+    ts_ip=$(ifconfig 2>/dev/null | grep -oE 'inet 100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]+\.[0-9]+' | head -1 | awk '{print $2}')
+    _ok "tailscale: ${ts_ip:-CGNAT IP detected}"
+    found=1
+  fi
   (( found )) || printf '  no active tunnels\n'
 
   _hdr "Detection sources"
