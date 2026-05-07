@@ -1,27 +1,39 @@
 # vpnii
 
-VPN status indicator for zsh. Shows active WireGuard tunnels in your RPROMPT.
+VPN status indicator for zsh. Two indicators in your RPROMPT — active tunnels
+(wg-quick / cache) and Tailscale (always visible, with account name when up).
 
 ```
-~  ⬡ HomeLab
+~  ⬡ HomeLab  ⊕ bma            # wg tunnel + tailscale active as bma
+~  ⊕ bma                       # only tailscale, signed in as bma
+~  ⊖ off                       # tailscale not connected (dim)
 ```
 
 Zero dependencies. No background processes. No polling. No WireGuard config changes needed.
 
 ## How it works
 
-vpnii detects active tunnels from system state — no hooks, no elevated privileges:
+vpnii detects state from the system — no hooks, no elevated privileges:
+
+**VPN tunnel indicator** (`⬡`, shown only when something is up):
 
 | Source | When used |
 |--------|-----------|
 | `/var/run/wireguard/<name>.name` | wg-quick on macOS (automatic) |
 | `~/.cache/vpnii/<name>` | Passepartout, other VPN tools, manual use |
-| Tailscale CGNAT IP (`100.64.0.0/10`) | Tailscale, OSS or Mac App Store build |
 
-wg-quick creates and removes the `.name` file automatically when tunnels go up/down.
-Tailscale detection works for the App Store build too — `tailscale status` fails
-there because the CLI is sandboxed off from the daemon, but `ifconfig` always sees
-the tunnel address. Disable with `VPNII_TS_ENABLED=0`; rename with `VPNII_TS_NAME`.
+**Tailscale indicator** (`⊕` active / `⊖ off` dim, always visible):
+
+| Signal | What it tells |
+|--------|---------------|
+| CGNAT IP `100.64.0.0/10` on any interface | active vs. inactive |
+| `~/Library/Preferences/io.tailscale.ipn.macsys.plist` (or `…macos.plist`) | account name (App Store / DMG build) |
+| `tailscale status --json` | account name (OSS CLI fallback) |
+
+The IP check works for the Mac App Store build too — `tailscale status` fails
+there because the CLI is sandboxed off from the daemon, but `ifconfig` always
+sees the tunnel address. The plist source covers the same gap for the account
+name. Disable the whole tailscale indicator with `VPNII_TS_ENABLED=0`.
 
 ## Install
 
@@ -104,8 +116,11 @@ Set these before sourcing vpnii:
 | `VPNII_CLR_ACTIVE` | `%F{green}` | zsh prompt color |
 | `VPNII_CLR_RESET` | `%f` | zsh prompt reset |
 | `VPNII_ENABLED` | `1` | Set to `0` to disable |
-| `VPNII_TS_ENABLED` | `1` | Set to `0` to skip tailscale detection |
-| `VPNII_TS_NAME` | `tailscale` | Label shown when tailscale is up |
+| `VPNII_TS_ENABLED` | `1` | Set to `0` to hide the tailscale indicator entirely |
+| `VPNII_TS_NAME` | `tailscale` | Label fallback when account name can't be read |
+| `VPNII_TS_SYM_ACTIVE` | `⊕` | Symbol when tailscale is connected |
+| `VPNII_TS_SYM_INACTIVE` | `⊖` | Symbol when tailscale is off |
+| `VPNII_TS_CLR_INACTIVE` | `%F{8}` | zsh prompt color for the "off" state |
 
 ## Public API
 

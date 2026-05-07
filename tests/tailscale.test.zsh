@@ -1,11 +1,8 @@
-# Tests for tailscale detection — stubs ifconfig via PATH so the test
-# matrix doesn't depend on the host's actual network state.
+# Tests for tailscale detection. Stubs ifconfig via PATH so tests don't
+# depend on the host's actual network state. _vpnii_tailscale_active is
+# a yes/no check on CGNAT IP presence (100.64.0.0/10).
 
 stubdir=$(mktemp -d)
-tmpdir=$(mktemp -d)
-export VPNII_WG_DIR="${tmpdir}/wg"
-export VPNII_CACHE_DIR="${tmpdir}/cache"
-mkdir -p "$VPNII_WG_DIR" "$VPNII_CACHE_DIR"
 
 make_ifconfig_stub() {
   local content="$1"
@@ -18,74 +15,61 @@ EOF
   chmod +x "${stubdir}/ifconfig"
 }
 
-# Source after stubbing PATH so subsequent ifconfig calls hit the stub.
 export PATH="${stubdir}:${PATH}"
 source "${VPNII_HOME}/lib/vpnii.zsh"
 
-# 1. No tailscale IP → not detected.
+# 1. No tailnet IP → inactive.
 make_ifconfig_stub "lo0: flags=8049
 	inet 127.0.0.1 netmask 0xff000000
 en0: flags=8863
 	inet 192.168.1.42 netmask 0xffffff00"
-typeset -a reply=()
-_vpnii_collect_tunnels
-assert_eq "${reply[*]}" "" "no tailnet IP: empty reply"
+_vpnii_tailscale_active && active=1 || active=0
+assert_eq "$active" "0" "no tailnet IP: inactive"
 
-# 2. CGNAT IP present → detected with default name.
+# 2. CGNAT lower bound (100.64.x.x) → active.
 make_ifconfig_stub "utun9: flags=8051
 	inet 100.64.0.3 --> 100.64.0.3 netmask 0xffffffff"
-typeset -a reply=()
-_vpnii_collect_tunnels
-assert_eq "${reply[*]}" "tailscale" "100.64.0.3: detected as 'tailscale'"
+_vpnii_tailscale_active && active=1 || active=0
+assert_eq "$active" "1" "100.64.x.x: active"
 
-# 3. Edge of CGNAT range — 100.127.x.x (upper bound).
+# 3. CGNAT upper bound (100.127.x.x) → still active.
 make_ifconfig_stub "utun9: flags=8051
 	inet 100.127.255.254 netmask 0xffffffff"
-typeset -a reply=()
-_vpnii_collect_tunnels
-assert_eq "${reply[*]}" "tailscale" "100.127.x.x: still in CGNAT range"
+_vpnii_tailscale_active && active=1 || active=0
+assert_eq "$active" "1" "100.127.x.x: active"
 
-# 4. Just outside CGNAT — 100.63.x.x and 100.128.x.x must NOT trigger.
+# 4. Just outside CGNAT → inactive (100.63 below, 100.128 above).
 make_ifconfig_stub "utun9: flags=8051
 	inet 100.63.0.1 netmask 0xffffffff"
-typeset -a reply=()
-_vpnii_collect_tunnels
-assert_eq "${reply[*]}" "" "100.63.x.x: outside CGNAT, ignored"
+_vpnii_tailscale_active && active=1 || active=0
+assert_eq "$active" "0" "100.63.x.x: outside CGNAT"
 
 make_ifconfig_stub "utun9: flags=8051
 	inet 100.128.0.1 netmask 0xffffffff"
-typeset -a reply=()
-_vpnii_collect_tunnels
-assert_eq "${reply[*]}" "" "100.128.x.x: outside CGNAT, ignored"
+_vpnii_tailscale_active && active=1 || active=0
+assert_eq "$active" "0" "100.128.x.x: outside CGNAT"
 
-# 5. Disable knob — VPNII_TS_ENABLED=0 suppresses detection even when active.
+# 5. Account cache returns its stored value across calls.
+_vpnii_ts_account_cache="cached-user"
+result=$(_vpnii_tailscale_account)
+assert_eq "$result" "cached-user" "account cache: returns stored value"
+_vpnii_ts_account_cache=""
+
+# _vpnii_collect_tunnels no longer mixes TS in — it stays pure wg-quick + cache.
+# This is the contract change we just made; pin it.
+tmpdir=$(mktemp -d)
+VPNII_WG_DIR="${tmpdir}/wg"
+VPNII_CACHE_DIR="${tmpdir}/cache"
+mkdir -p "$VPNII_WG_DIR" "$VPNII_CACHE_DIR"
 make_ifconfig_stub "utun9: flags=8051
 	inet 100.64.0.3 netmask 0xffffffff"
-VPNII_TS_ENABLED=0
 typeset -a reply=()
 _vpnii_collect_tunnels
-assert_eq "${reply[*]}" "" "VPNII_TS_ENABLED=0: detection disabled"
-VPNII_TS_ENABLED=1
+assert_eq "${#reply}" "0" "collect_tunnels excludes TS even when active"
 
-# 6. Custom name via VPNII_TS_NAME.
-VPNII_TS_NAME="ts"
-typeset -a reply=()
-_vpnii_collect_tunnels
-assert_eq "${reply[*]}" "ts" "VPNII_TS_NAME=ts: custom label used"
-VPNII_TS_NAME="tailscale"
-
-# 7. Coexistence with wg-quick tunnel — both appear.
 touch "${VPNII_WG_DIR}/homelab.name"
 typeset -a reply=()
 _vpnii_collect_tunnels
-assert_eq "${reply[*]}" "homelab tailscale" "wg+ts: both listed, wg first"
-
-# 8. Dedup: cache file already named "tailscale" → don't double up.
-rm "${VPNII_WG_DIR}/homelab.name"
-touch "${VPNII_CACHE_DIR}/tailscale"
-typeset -a reply=()
-_vpnii_collect_tunnels
-assert_eq "${#reply}" "1" "dedup: tailscale in both cache and detection → 1"
-assert_eq "${reply[*]}" "tailscale" "dedup: name preserved"
+assert_eq "${reply[*]}" "homelab" "collect_tunnels: only wg-quick tunnel"
 
 rm -rf "$stubdir" "$tmpdir"

@@ -89,10 +89,24 @@ _cmd_list() {
 
 _cmd_status() {
   _vpnii_collect_tunnels
-  if (( ${#reply} == 0 )); then
+  local -a parts=()
+  if (( ${#reply} > 0 )); then
+    parts+=("$VPNII_SYM_VPN ${(j:, :)reply}")
+  fi
+  if [[ "${VPNII_TS_ENABLED:-1}" == "1" ]]; then
+    if _vpnii_tailscale_active; then
+      local account
+      account=$(_vpnii_tailscale_account 2>/dev/null) || account=""
+      [[ -z "$account" ]] && account="$VPNII_TS_NAME"
+      parts+=("$VPNII_TS_SYM_ACTIVE $account")
+    else
+      parts+=("$VPNII_TS_SYM_INACTIVE off")
+    fi
+  fi
+  if (( ${#parts} == 0 )); then
     printf 'no active tunnels\n'
   else
-    printf '%s %s\n' "$VPNII_SYM_VPN" "${(j:, :)reply}"
+    printf '%s\n' "${(j:  :)parts}"
   fi
 }
 
