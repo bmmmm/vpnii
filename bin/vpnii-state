@@ -1,5 +1,0 @@
-#!/usr/bin/env zsh
-# Transitional shim — forwards to `vpnii` so legacy wireguard PostUp/PreDown
-# hooks (which embed an absolute path to this file) keep working until the
-# user runs `sudo vpnii wg-setup` on each config. Safe to delete after that.
-exec "${0:A:h}/vpnii" "$@"

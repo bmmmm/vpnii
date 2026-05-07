@@ -69,6 +69,7 @@ vpnii status            human-readable: "⬡ HomeLab" or "no active tunnels"
 vpnii clear             remove all manual state files (wg-quick unaffected)
 vpnii diag              show full vpnii status
 vpnii setup [-y] [<conf>...]   chown wireguard configs and strip stale hooks (-y skips prompts)
+vpnii install [-y] <conf>      copy a clean wg config into /etc/wireguard, owned by you
 ```
 
 `up`/`down` are only needed for VPN clients that don't use wg-quick
@@ -123,7 +124,7 @@ Output sections:
 | Active tunnels | currently up — from `*.name` files and the cache dir |
 | Detection sources | both source directories exist and are readable |
 | WireGuard binaries | `wg`, `wg-quick` resolvable in PATH |
-| vpnii | binary present and on PATH (or symlinked to `/usr/local/bin`); flags the transitional `vpnii-state` shim if still in place |
+| vpnii | binary present and on PATH (or symlinked to `/usr/local/bin`) |
 | Shell integration | plugin sourced from `~/.zshrc` |
 | WireGuard configs | flags stale `vpnii(-state)` hooks in `/etc/wireguard/*.conf` |
 
@@ -153,9 +154,24 @@ contexts (`install.sh`, scripts).
 `install.sh` runs `vpnii setup` automatically at the end if `/etc/wireguard`
 already contains configs.
 
-The `bin/vpnii-state` shim in this repo exists so legacy hooks (which
-embed an absolute path) keep working until `vpnii setup` has cleaned all
-configs. Safe to delete after that.
+## `vpnii install`
+
+Lands a clean wg config in `/etc/wireguard/<name>.conf` with the right
+ownership in one step:
+
+```zsh
+vpnii install ~/wg/HomeLab.conf
+```
+
+It checks `wg-quick` is installed (with a `brew install wireguard-tools`
+hint if not), refuses configs that still have `vpnii-state` hooks
+(`vpnii setup <conf>` cleans those first), creates `/etc/wireguard/` if
+needed, then `sudo cp` + `sudo chown $USER:staff` + `sudo chmod 600`.
+
+Pass `-y` to overwrite an existing config without prompting.
+
+After install: `sudo wg-quick up <name>` to bring the tunnel up. vpnii
+detects it automatically via `/var/run/wireguard/<name>.name`.
 
 ## Troubleshooting
 
@@ -182,7 +198,6 @@ vpnii clear
 | `vpnii.plugin.zsh` | oh-my-zsh entry point — sources `lib/vpnii.zsh` |
 | `lib/vpnii.zsh` | Detection logic, `_vpnii_precmd` hook, public `vpnii_active_tunnels` API |
 | `bin/vpnii` | CLI dispatcher — all subcommands |
-| `bin/vpnii-state` | Transitional shim — forwards to `vpnii` for legacy hooks |
 | `install.sh` / `uninstall.sh` | Adds/removes the source line in `~/.zshrc` and the PATH entry |
 | `/var/run/wireguard/<name>.name` | wg-quick's tunnel marker (read-only, system-managed) |
 | `~/.cache/vpnii/<name>` | Manual state file — one empty file per active tunnel |
