@@ -1,39 +1,50 @@
 #!/usr/bin/env zsh
 # vpnii core — precmd hook + public API
 #
-# State protocol (presence-based):
-#   Active tunnel:   $VPNII_CACHE_DIR/<TunnelName>  exists
-#   Inactive tunnel: file absent
-#   Multiple tunnels: multiple files, one per tunnel
+# Detection (in order):
+#   1. /var/run/wireguard/<name>.name  — wg-quick on macOS, zero config, zero elevation
+#   2. $VPNII_CACHE_DIR/<name>         — manual state files (Passepartout, other VPN tools)
 
 : "${VPNII_CACHE_DIR:=${XDG_CACHE_HOME:-$HOME/.cache}/vpnii}"
+: "${VPNII_WG_DIR:=/var/run/wireguard}"
 : "${VPNII_SYM_VPN:=⬡}"
 (( ${+VPNII_CLR_ACTIVE} )) || VPNII_CLR_ACTIVE='%F{green}'
 (( ${+VPNII_CLR_RESET} ))  || VPNII_CLR_RESET='%f'
 
-# vpnii_active_tunnels — print active tunnel names, one per line
-# Returns 1 if no tunnels active
+# vpnii_active_tunnels — print active tunnel names, one per line; exit 1 if none
 function vpnii_active_tunnels {
-  [[ -d "$VPNII_CACHE_DIR" ]] || return 1
-  local found=0 f
-  for f in "$VPNII_CACHE_DIR"/*(N); do
+  local f name seen=() found=0
+  for f in "${VPNII_WG_DIR}"/*.name(N); do
     [[ -f "$f" ]] || continue
-    printf '%s\n' "${f:t}"
+    name="${f:t:r}"
+    seen+=("$name")
+    printf '%s\n' "$name"
     found=1
+  done
+  for f in "${VPNII_CACHE_DIR}"/*(N); do
+    [[ -f "$f" ]] || continue
+    name="${f:t}"
+    (( ${seen[(I)$name]} )) || { printf '%s\n' "$name"; found=1; }
   done
   (( found ))
 }
 
 function _vpnii_precmd {
   [[ "${VPNII_ENABLED:-1}" == "0" ]] && return
-  local tunnels=() f
-  [[ -d "$VPNII_CACHE_DIR" ]] || return
-  for f in "$VPNII_CACHE_DIR"/*(N); do
-    [[ -f "$f" ]] && tunnels+=("${f:t}")
+  local tunnels=() seen=() f name
+  for f in "${VPNII_WG_DIR}"/*.name(N); do
+    [[ -f "$f" ]] || continue
+    name="${f:t:r}"
+    tunnels+=("$name")
+    seen+=("$name")
+  done
+  for f in "${VPNII_CACHE_DIR}"/*(N); do
+    [[ -f "$f" ]] || continue
+    name="${f:t}"
+    (( ${seen[(I)$name]} )) || tunnels+=("$name")
   done
   (( ${#tunnels} == 0 )) && return
-  local label="${(j:, :)tunnels}"
-  RPROMPT="${RPROMPT:+${RPROMPT} }${VPNII_CLR_ACTIVE}${VPNII_SYM_VPN} ${label}${VPNII_CLR_RESET}"
+  RPROMPT="${RPROMPT:+${RPROMPT} }${VPNII_CLR_ACTIVE}${VPNII_SYM_VPN} ${(j:, :)tunnels}${VPNII_CLR_RESET}"
 }
 
 autoload -Uz add-zsh-hook

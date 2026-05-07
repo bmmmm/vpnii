@@ -9,9 +9,9 @@ SOURCE_LINE="source \"${VPNII_HOME}/vpnii.plugin.zsh\""
 BIN_TARGET="/usr/local/bin/vpnii-state"
 BIN_SOURCE="${VPNII_HOME}/bin/vpnii-state"
 
-_green() { printf '\033[0;32m%s\033[0m\n' "$*"; }
+_green()  { printf '\033[0;32m%s\033[0m\n' "$*"; }
 _yellow() { printf '\033[0;33m%s\033[0m\n' "$*"; }
-_bold() { printf '\033[1m%s\033[0m\n' "$*"; }
+_bold()   { printf '\033[1m%s\033[0m\n' "$*"; }
 
 _bold "vpnii installer"
 printf '\n'
@@ -24,7 +24,7 @@ else
   _green "✓ added to $ZSHRC"
 fi
 
-# 2. Link vpnii-state to PATH
+# 2. Link vpnii-state to PATH (needed for manual use / Passepartout hooks)
 if [[ -w "/usr/local/bin" ]]; then
   ln -sf "$BIN_SOURCE" "$BIN_TARGET"
   _green "✓ vpnii-state linked to $BIN_TARGET"
@@ -36,52 +36,8 @@ else
   _yellow "→ /usr/local/bin not writable — added ${VPNII_HOME}/bin to PATH in $ZSHRC"
 fi
 
-# 3. Create cache dir + clean stale root-owned state files
-VPNII_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/vpnii"
-mkdir -p "$VPNII_CACHE_DIR"
-_green "✓ cache dir: $VPNII_CACHE_DIR"
-
-stale=()
-for f in "$VPNII_CACHE_DIR"/*(N); do
-  [[ -f "$f" ]] && [[ ! -O "$f" ]] && stale+=("$f")
-done
-if (( ${#stale} > 0 )); then
-  _yellow "→ stale root-owned state files: ${(j: :)stale:t}"
-  printf 'Remove them? [y/N] '
-  read -r answer
-  if [[ "${answer:l}" == "y" ]]; then
-    sudo rm -f "${stale[@]}"
-    _green "✓ stale state cleared"
-  fi
-fi
-
-# 4. Patch WireGuard configs
-printf '\n'
-_bold "WireGuard integration"
-
-wg_dir="/etc/wireguard"
-wg_configs=()
-if [[ -d "$wg_dir" ]]; then
-  for f in "$wg_dir"/*.conf(N); do
-    [[ -f "$f" ]] && wg_configs+=("$f")
-  done
-fi
-
-if (( ${#wg_configs} == 0 )); then
-  printf 'No WireGuard configs found in %s.\n' "$wg_dir"
-  printf 'Run manually: sudo %s/bin/vpnii-wg-setup /etc/wireguard/<name>.conf\n' "$VPNII_HOME"
-else
-  for conf in "${wg_configs[@]}"; do
-    name="${conf:t:r}"
-    printf 'Found: %s — patch PostUp/PreDown? [y/N] ' "$conf"
-    read -r answer
-    if [[ "${answer:l}" == "y" ]]; then
-      sudo "$VPNII_HOME/bin/vpnii-wg-setup" "$conf"
-    else
-      printf '  Skipped. Run manually: sudo %s/bin/vpnii-wg-setup %s\n' "$VPNII_HOME" "$conf"
-    fi
-  done
-fi
-
 printf '\n'
 _green "Done. Open a new shell or: source $ZSHRC"
+printf '\n'
+printf 'wg-quick tunnels are detected automatically — no config changes needed.\n'
+printf 'For other VPN tools: vpnii-state up <name> / vpnii-state down <name>\n'
