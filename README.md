@@ -62,8 +62,8 @@ WireGuard configs are left unchanged.
 A single command with subcommands:
 
 ```
-vpnii up <tunnel>       mark tunnel active (manual cache only)
-vpnii down <tunnel>     mark tunnel inactive (manual cache only)
+vpnii up <tunnel>       bring tunnel up   (sudo wg-quick if managed, else cache)
+vpnii down <tunnel>     bring tunnel down (sudo wg-quick if managed, else cache)
 vpnii list              list active tunnels (all sources, one per line)
 vpnii status            human-readable: "⬡ HomeLab" or "no active tunnels"
 vpnii clear             remove all manual state files (wg-quick unaffected)
@@ -73,16 +73,14 @@ vpnii export [-y] <conf> [<dir>]  read a wg config, strip hooks, write a clean c
 vpnii install [-y] [-n NAME] <conf>   copy a clean wg config into /etc/wireguard, owned by you
 ```
 
-`up`/`down` are only needed for VPN clients that don't use wg-quick
-(Passepartout, manual scripts) — wg-quick tunnels are picked up automatically.
+`up` and `down` adapt based on how the tunnel is managed:
 
-The CLI only manages the manual cache directory. wg-quick tunnels are
-read-only from its perspective:
-
-- `up <name>` is a no-op (with a notice) if `<name>` is already up via wg-quick.
-- `down <name>` warns to stderr if `<name>` is wg-quick-managed; the correct
-  command is `sudo wg-quick down <name>`. `down` is always idempotent (exit 0).
-- `down <name>` on an inactive tunnel is silent (no-op).
+- `/etc/wireguard/<name>.conf` exists → `vpnii up <name>` runs
+  `sudo wg-quick up <name>`. `vpnii down <name>` does the corresponding
+  `sudo wg-quick down`.
+- No wg-quick config → `up`/`down` only manipulate `~/.cache/vpnii/<name>`,
+  used by non-wg-quick VPN clients (Passepartout, manual scripts).
+- `down` on an unknown tunnel is a silent no-op (idempotent).
 
 Names containing `/`, leading `.`, or empty strings are rejected to keep
 writes confined to the cache directory.
