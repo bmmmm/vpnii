@@ -1,0 +1,62 @@
+#compdef vpnii
+# zsh completion for vpnii. Autoloaded — make sure the directory of this
+# file is on $fpath before `compinit` runs (vpnii.plugin.zsh handles that
+# for the standard install path).
+
+_vpnii() {
+  local -a subcmds
+  subcmds=(
+    'up:bring tunnel up (or pick interactively)'
+    'down:bring tunnel down (or pick from active)'
+    'list:list active tunnels'
+    'status:human-readable status line'
+    'clear:remove manual cache state'
+    'diag:show full vpnii status'
+    'setup:maintain configs / first-time wizard'
+    'install:copy a clean wg config to /etc/wireguard'
+    'export:strip vpnii hooks from a wg config'
+    'help:show usage'
+  )
+
+  if (( CURRENT == 2 )); then
+    _describe -t commands 'vpnii command' subcmds
+    return
+  fi
+
+  local cmd="${words[2]}"
+  case "$cmd" in
+    up)
+      local -a names
+      # wg-quick configs
+      local conf
+      for conf in /etc/wireguard/*.conf(N.); do
+        names+=("${conf:t:r}")
+      done
+      # tailscale (always offered when enabled)
+      [[ "${VPNII_TS_ENABLED:-1}" == "1" ]] && names+=("${VPNII_TS_NAME:-ts}")
+      _describe -t tunnels 'tunnel' names
+      ;;
+    down)
+      local -a active
+      # wg-quick / cache markers
+      local f
+      for f in "${VPNII_WG_DIR:-/var/run/wireguard}"/*.name(N.); do
+        active+=("${f:t:r}")
+      done
+      for f in "${VPNII_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/vpnii}"/*(N.); do
+        active+=("${f:t}")
+      done
+      # tailscale, only when an interface holds a CGNAT IP
+      if [[ "${VPNII_TS_ENABLED:-1}" == "1" ]] \
+        && ifconfig 2>/dev/null | grep -qE 'inet 100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.'; then
+        active+=("${VPNII_TS_NAME:-ts}")
+      fi
+      _describe -t tunnels 'active tunnel' active
+      ;;
+    setup|install|export)
+      _files -g '*.conf'
+      ;;
+  esac
+}
+
+_vpnii "$@"

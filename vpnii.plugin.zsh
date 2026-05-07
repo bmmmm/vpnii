@@ -14,3 +14,8 @@
 
 export VPNII_HOME="${VPNII_HOME:-${0:A:h}}"
 source "${VPNII_HOME}/lib/vpnii.zsh"
+
+# Tab completion. fpath additions only kick in when compinit runs after
+# this file is sourced; oh-my-zsh handles that order. For standalone
+# users, source this plugin before running compinit in your .zshrc.
+fpath=("${VPNII_HOME}/lib" $fpath)
