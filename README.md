@@ -75,7 +75,15 @@ vpnii-state status         "⬡ HomeLab, work" — same sources as the prompt
 vpnii-state clear          remove all manual state files (wg-quick tunnels are unaffected)
 ```
 
-`up` and `down` reject names with `/`, leading `.`, or empty strings to keep
+`vpnii-state` only manages the manual cache directory — wg-quick tunnels are
+read-only from its perspective:
+
+- `up <name>` is a no-op (with a notice) if `<name>` is already up via wg-quick.
+- `down <name>` fails with a hint when `<name>` is wg-quick-managed; the correct
+  command is `sudo wg-quick down <name>`.
+- `down <name>` on an inactive tunnel exits 0 with an info message (idempotent).
+
+Names containing `/`, leading `.`, or empty strings are rejected to keep
 writes confined to the cache directory.
 
 ## Configuration

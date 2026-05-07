@@ -39,13 +39,25 @@ case "$cmd" in
   up)
     [[ $# -eq 1 ]] || _die "up requires a tunnel name"
     _validate_name "$1"
+    if [[ -f "${VPNII_WG_DIR}/${1}.name" ]]; then
+      printf 'vpnii-state: %s is already up via wg-quick — no manual state needed\n' "$1" >&2
+      exit 0
+    fi
     mkdir -p "$VPNII_CACHE_DIR"
     touch "${VPNII_CACHE_DIR}/${1}"
     ;;
   down)
     [[ $# -eq 1 ]] || _die "down requires a tunnel name"
     _validate_name "$1"
-    rm -f "${VPNII_CACHE_DIR}/${1}"
+    cache_file="${VPNII_CACHE_DIR}/${1}"
+    wg_marker="${VPNII_WG_DIR}/${1}.name"
+    if [[ -f "$cache_file" ]]; then
+      rm -f "$cache_file"
+    elif [[ -f "$wg_marker" ]]; then
+      _die "$1 is managed by wg-quick — run: sudo wg-quick down $1"
+    else
+      printf 'vpnii-state: %s was not active (nothing to do)\n' "$1" >&2
+    fi
     ;;
   list)
     vpnii_active_tunnels || true
