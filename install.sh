@@ -1,5 +1,6 @@
 #!/usr/bin/env zsh
-# vpnii install — adds vpnii to ~/.zshrc and puts the `vpnii` CLI on PATH
+# vpnii install — adds vpnii to ~/.zshrc, links the `vpnii` CLI on PATH, and
+# offers interactive `vpnii setup` for any existing /etc/wireguard configs.
 
 set -euo pipefail
 

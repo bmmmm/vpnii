@@ -52,7 +52,7 @@ function _vpnii_precmd {
 }
 
 # Register hook only in interactive shells, so this file can be safely
-# sourced from CLI scripts (vpnii-state, vpnii-diag) without side effects.
+# sourced from the `vpnii` CLI without side effects.
 if [[ -o interactive ]]; then
   autoload -Uz add-zsh-hook
   add-zsh-hook -d precmd _vpnii_precmd 2>/dev/null

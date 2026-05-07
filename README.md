@@ -27,7 +27,10 @@ cd ~/path/to/vpnii
 ./install.sh
 ```
 
-Open a new shell — that's it. No WireGuard config changes, no sudo required.
+Open a new shell — that's it. If `/etc/wireguard` already contains configs,
+`install.sh` offers an interactive `vpnii setup` (one-time `sudo chown` per
+config so future maintenance stays sudo-free). Decline freely; runtime never
+needs sudo either way.
 
 ### oh-my-zsh
 
@@ -120,7 +123,7 @@ Output sections:
 | Active tunnels | currently up — from `*.name` files and the cache dir |
 | Detection sources | both source directories exist and are readable |
 | WireGuard binaries | `wg`, `wg-quick` resolvable in PATH |
-| vpnii | binary present and on PATH (or symlinked to `/usr/local/bin`) |
+| vpnii | binary present and on PATH (or symlinked to `/usr/local/bin`); flags the transitional `vpnii-state` shim if still in place |
 | Shell integration | plugin sourced from `~/.zshrc` |
 | WireGuard configs | flags stale `vpnii(-state)` hooks in `/etc/wireguard/*.conf` |
 

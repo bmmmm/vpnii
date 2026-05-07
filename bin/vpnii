@@ -153,7 +153,7 @@ _cmd_diag() {
     _warn "not in PATH  (add ${VPNII_HOME}/bin to PATH)"
   fi
   if [[ -e "${VPNII_HOME}/bin/vpnii-state" ]]; then
-    _warn "transitional shim present: ${VPNII_HOME}/bin/vpnii-state — remove after 'vpnii wg-setup' on all configs"
+    _warn "transitional shim present: ${VPNII_HOME}/bin/vpnii-state — remove after 'vpnii setup' on all configs"
   fi
 
   _hdr "Shell integration"

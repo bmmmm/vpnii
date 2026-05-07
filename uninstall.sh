@@ -51,4 +51,4 @@ fi
 printf '\n'
 _green "Done. Open a new shell or: source $ZSHRC"
 printf '\nNote: WireGuard configs are unchanged.\n'
-printf 'To clean stale vpnii hooks: sudo %s/bin/vpnii wg-setup /etc/wireguard/<name>.conf\n' "$VPNII_HOME"
+printf 'To clean stale vpnii hooks: %s/bin/vpnii setup /etc/wireguard/<name>.conf\n' "$VPNII_HOME"
