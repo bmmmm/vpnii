@@ -103,6 +103,9 @@ _cmd_status() {
 _cmd_clear() {
   if [[ -d "$VPNII_CACHE_DIR" ]]; then
     rm -f "${VPNII_CACHE_DIR}/"*(N.)
+    # Older versions wrote .vpnii-bak files containing full config values
+    # under backups/ — wipe any leftover so private keys don't linger.
+    rm -rf "${VPNII_CACHE_DIR}/backups"
   fi
 }
 
@@ -165,6 +168,12 @@ _cmd_diag() {
   else
     _warn "not in PATH  (add ${VPNII_HOME}/bin to PATH)"
   fi
+  local stale_backups=( "${VPNII_CACHE_DIR}/backups"/*(N.) )
+  if (( ${#stale_backups} > 0 )); then
+    _warn "stale backups (${#stale_backups}) in ${VPNII_CACHE_DIR}/backups — contain config values"
+    printf '      → vpnii clear  (wipes them)\n'
+  fi
+
   _hdr "Shell integration"
   local zshrc_real="${zshrc:A}"
   if grep -qF "vpnii.plugin.zsh" "$zshrc_real" 2>/dev/null; then
@@ -332,9 +341,18 @@ _wizard_import() {
 
   # If WireGuard.app is installed, scan ~/Downloads for .conf files —
   # the export .zip typically lands there, often inside a nested folder.
+  # Only files that look like wg configs ([Interface]+[Peer]+PrivateKey)
+  # are kept — pi-hole's setupVars.conf etc. would be a false positive.
   local found=()
   if [[ -d /Applications/WireGuard.app || -d "$HOME/Applications/WireGuard.app" ]]; then
-    found=( "$HOME/Downloads"/**/*.conf(N.) )
+    local candidate
+    for candidate in "$HOME/Downloads"/**/*.conf(N.); do
+      if grep -q '^\[Interface\]' "$candidate" 2>/dev/null \
+        && grep -q '^\[Peer\]' "$candidate" 2>/dev/null \
+        && grep -qE '^PrivateKey\s*=' "$candidate" 2>/dev/null; then
+        found+=("$candidate")
+      fi
+    done
   fi
 
   local default=""
@@ -595,8 +613,10 @@ with open(dst, 'w') as f:
 PYEOF
 }
 
-# Strips hooks in-place. Backup goes to ~/.cache/vpnii/backups/ because
-# /etc/wireguard/ stays root-owned (no dir-write for the user).
+# Strips hooks in-place via a $TMPDIR scratch file. No disk backup is
+# retained — config values (PrivateKey, Endpoint, …) never leave
+# /etc/wireguard. The strip is deterministic and transactional: if
+# _strip_to_file fails (set -e aborts), the original is untouched.
 _strip_hooks() {
   local conf="$1"
   if [[ ! -w "$conf" ]]; then
@@ -604,18 +624,12 @@ _strip_hooks() {
     return 1
   fi
 
-  local backup_dir="${VPNII_CACHE_DIR}/backups"
-  mkdir -p "$backup_dir"
-  local backup="${backup_dir}/${conf:t}.$(date +%Y%m%d-%H%M%S).vpnii-bak"
-  cp "$conf" "$backup"
-  _info "backup: $backup"
-
   local tmpfile
   tmpfile=$(mktemp)
   _strip_to_file "$conf" "$tmpfile"
   cp "$tmpfile" "$conf"
   rm -f "$tmpfile"
-  _ok "stripped (backup at $backup)"
+  _ok "stripped (no backup retained)"
 }
 
 # --- WireGuard config install ----------------------------------------------

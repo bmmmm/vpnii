@@ -150,9 +150,12 @@ Per config, it offers two operations:
    clean the file without root. wg-quick continues to work because
    wg-quick itself runs as root and reads the file regardless of owner.
 2. **Strip legacy hooks** — removes any `vpnii-state up/down` calls from
-   `PostUp`/`PreDown` left over from older versions. A timestamped backup
-   is written to `~/.cache/vpnii/backups/` (the parent directory
-   `/etc/wireguard/` stays root-owned and write-locked).
+   `PostUp`/`PreDown` left over from older versions. The strip is done
+   via a `$TMPDIR` scratch file that's deleted right after the copy —
+   no disk backup is retained, so config values (PrivateKey, Endpoint,
+   …) never leave `/etc/wireguard`. The strip is deterministic and
+   transactional; if anything fails before the copy, the original is
+   untouched.
 
 Pass `-y` / `--yes` to auto-accept every prompt — useful from non-interactive
 contexts (`install.sh`, scripts).
