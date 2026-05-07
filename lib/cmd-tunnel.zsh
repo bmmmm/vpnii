@@ -21,9 +21,18 @@ _cmd_up() {
     _pick_one "Available tunnels" "${names[@]}" || _die "aborted"
     name="$REPLY"
   else
-    [[ $# -eq 1 ]] || _die "up takes at most one tunnel name"
-    name="$1"
+    [[ $# -ge 1 ]] || _die "up takes a tunnel name"
+    name="$1"; shift
   fi
+
+  # Tailscale branch: name matches the configured TS label or the literal
+  # "tailscale". Extra args (e.g. profile) get forwarded.
+  if [[ "$name" == "$VPNII_TS_NAME" || "$name" == "tailscale" ]]; then
+    _cmd_tailscale_up "$@"
+    return
+  fi
+  (( $# == 0 )) || _die "up takes at most one tunnel name (extra args only valid for tailscale)"
+
   _validate_name "$name"
   local conf="/etc/wireguard/${name}.conf"
 
@@ -51,6 +60,11 @@ _cmd_down() {
   local name=""
   if (( $# == 0 )); then
     local -a active=( ${(f)"$(vpnii_active_tunnels 2>/dev/null)"} )
+    # Tailscale isn't in vpnii_active_tunnels (it's a separate indicator),
+    # but it should be a pickable down-target when up.
+    if [[ "${VPNII_TS_ENABLED:-1}" == "1" ]] && _vpnii_tailscale_active; then
+      active+=("$VPNII_TS_NAME")
+    fi
     if (( ${#active} == 0 )); then
       _info "no active tunnels"
       return 0
@@ -61,6 +75,13 @@ _cmd_down() {
     [[ $# -eq 1 ]] || _die "down takes at most one tunnel name"
     name="$1"
   fi
+
+  # Tailscale branch.
+  if [[ "$name" == "$VPNII_TS_NAME" || "$name" == "tailscale" ]]; then
+    _cmd_tailscale_down
+    return
+  fi
+
   _validate_name "$name"
   local cache_file="${VPNII_CACHE_DIR}/${name}"
   local wg_marker="${VPNII_WG_DIR}/${name}.name"
@@ -95,10 +116,7 @@ _cmd_status() {
   fi
   if [[ "${VPNII_TS_ENABLED:-1}" == "1" ]]; then
     if _vpnii_tailscale_active; then
-      local account
-      account=$(_vpnii_tailscale_account 2>/dev/null) || account=""
-      [[ -z "$account" ]] && account="$VPNII_TS_NAME"
-      parts+=("$VPNII_TS_SYM_ACTIVE $account")
+      parts+=("$VPNII_TS_SYM_ACTIVE $VPNII_TS_NAME")
     else
       parts+=("$VPNII_TS_SYM_INACTIVE off")
     fi

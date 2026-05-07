@@ -20,8 +20,8 @@
 : "${VPNII_WG_DIR:=/var/run/wireguard}"
 : "${VPNII_SYM_VPN:=⬡}"
 : "${VPNII_TS_ENABLED:=1}"
-: "${VPNII_TS_NAME:=tailscale}"
-: "${VPNII_TS_SYM_ACTIVE:=⊕}"
+: "${VPNII_TS_NAME:=ts}"
+: "${VPNII_TS_SYM_ACTIVE:=⬢}"
 : "${VPNII_TS_SYM_INACTIVE:=⊖}"
 (( ${+VPNII_CLR_ACTIVE} ))      || VPNII_CLR_ACTIVE='%F{green}'
 (( ${+VPNII_CLR_RESET} ))       || VPNII_CLR_RESET='%f'
@@ -56,13 +56,17 @@ function _vpnii_tailscale_account {
     local tmp
     tmp=$(mktemp) || continue
     if plutil -convert xml1 -o "$tmp" "$plist" 2>/dev/null; then
+      # The blob has two DisplayName fields (UserProfile and NetworkProfile),
+      # in unstable JSON-key order. NetworkProfile.DisplayName is often
+      # empty, so we filter to the first non-empty match — that's the
+      # account name we want.
       account=$(awk '
         /<key>com\.tailscale\.cached\.currentProfile<\/key>/{f=1; next}
         f && /<data>/{f=2; next}
         f==2 && /<\/data>/{exit}
         f==2{print}
       ' "$tmp" | tr -d ' \t\n' | base64 -D 2>/dev/null \
-        | grep -oE '"DisplayName":"[^"]*"' | head -1 \
+        | grep -oE '"DisplayName":"[^"]+"' | head -1 \
         | sed -E 's/.*:"([^"]*)".*/\1/')
     fi
     rm -f "$tmp"
@@ -130,16 +134,13 @@ function _vpnii_precmd {
     parts+=("${VPNII_CLR_ACTIVE}${VPNII_SYM_VPN} ${(j:, :)reply}${VPNII_CLR_RESET}")
   fi
 
-  # Tailscale indicator: always rendered when enabled — active shows the
-  # account (falls back to VPNII_TS_NAME if account isn't extractable),
-  # inactive shows a dim "off" so the user can tell the difference between
-  # "TS is down" and "vpnii forgot about TS".
+  # Tailscale indicator: always rendered when enabled. Compact label
+  # (VPNII_TS_NAME, default "ts") — account name lives in `vpnii diag`,
+  # not the prompt, so the indicator stays a stable width regardless of
+  # which tailnet/profile is active.
   if [[ "${VPNII_TS_ENABLED:-1}" == "1" ]]; then
     if _vpnii_tailscale_active; then
-      local account
-      account=$(_vpnii_tailscale_account 2>/dev/null) || account=""
-      [[ -z "$account" ]] && account="$VPNII_TS_NAME"
-      parts+=("${VPNII_CLR_ACTIVE}${VPNII_TS_SYM_ACTIVE} ${account}${VPNII_CLR_RESET}")
+      parts+=("${VPNII_CLR_ACTIVE}${VPNII_TS_SYM_ACTIVE} ${VPNII_TS_NAME}${VPNII_CLR_RESET}")
     else
       parts+=("${VPNII_TS_CLR_INACTIVE}${VPNII_TS_SYM_INACTIVE} off${VPNII_CLR_RESET}")
     fi

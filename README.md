@@ -4,10 +4,14 @@ VPN status indicator for zsh. Two indicators in your RPROMPT — active tunnels
 (wg-quick / cache) and Tailscale (always visible, with account name when up).
 
 ```
-~  ⬡ HomeLab  ⊕ bma            # wg tunnel + tailscale active as bma
-~  ⊕ bma                       # only tailscale, signed in as bma
+~  ⬡ HomeLab  ⬢ ts             # wg tunnel + tailscale active
+~  ⬢ ts                        # only tailscale up
 ~  ⊖ off                       # tailscale not connected (dim)
 ```
+
+Outline `⬡` is wg-quick / cache tunnels; solid `⬢` is Tailscale. The Tailscale
+account name is intentionally not in the prompt — names are unstable and can
+get long. Run `vpnii diag` for the account.
 
 Zero dependencies. No background processes. No polling. No WireGuard config changes needed.
 
@@ -78,16 +82,25 @@ WireGuard configs are left unchanged.
 A single command with subcommands:
 
 ```
-vpnii up [<tunnel>]     bring tunnel up   (auto-pick if only one config, list if many)
-vpnii down [<tunnel>]   bring tunnel down (auto-pick from active, list if many)
-vpnii list              list active tunnels (all sources, one per line)
-vpnii status            human-readable: "⬡ HomeLab" or "no active tunnels"
+vpnii up [<tunnel> [<profile>]]  bring up. wg-quick / cache / tailscale.
+                                 'tailscale' (or VPNII_TS_NAME, default 'ts')
+                                 routes to `tailscale up`. <profile> picks a
+                                 tailnet when more than one is configured.
+vpnii down [<tunnel>]   bring down (auto-pick from active incl. tailscale)
+vpnii list              list active tunnels (excludes tailscale; that's a
+                        separate indicator with its own state)
+vpnii status            human-readable: "⬡ HomeLab  ⬢ ts" / "⊖ off"
 vpnii clear             remove all manual state files (wg-quick unaffected)
-vpnii diag              show full vpnii status
+vpnii diag              show full vpnii status (incl. tailscale account)
 vpnii setup [-y] [<conf>...]      adaptive: maintenance for existing configs, wizard for empty
 vpnii export [-y] <conf> [<dir>]  read a wg config, strip hooks, write a clean copy (default cwd)
 vpnii install [-y] [-n NAME] <conf>   copy a clean wg config into /etc/wireguard, owned by you
 ```
+
+`vpnii up tailscale` works with the OSS install (`brew install tailscale`).
+The Mac App Store build sandboxes its CLI off from the daemon, so `tailscale
+up`/`down` from any shell fails — vpnii detects this and points to the menu
+bar app. Detection (the `⬢ ts` indicator) still works regardless.
 
 `up` and `down` adapt based on how the tunnel is managed:
 
@@ -117,8 +130,8 @@ Set these before sourcing vpnii:
 | `VPNII_CLR_RESET` | `%f` | zsh prompt reset |
 | `VPNII_ENABLED` | `1` | Set to `0` to disable |
 | `VPNII_TS_ENABLED` | `1` | Set to `0` to hide the tailscale indicator entirely |
-| `VPNII_TS_NAME` | `tailscale` | Label fallback when account name can't be read |
-| `VPNII_TS_SYM_ACTIVE` | `⊕` | Symbol when tailscale is connected |
+| `VPNII_TS_NAME` | `ts` | Label shown in the prompt when active; also the name to type for `vpnii up`/`down` |
+| `VPNII_TS_SYM_ACTIVE` | `⬢` | Symbol when tailscale is connected |
 | `VPNII_TS_SYM_INACTIVE` | `⊖` | Symbol when tailscale is off |
 | `VPNII_TS_CLR_INACTIVE` | `%F{8}` | zsh prompt color for the "off" state |
 

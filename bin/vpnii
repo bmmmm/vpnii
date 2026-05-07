@@ -2,10 +2,13 @@
 # vpnii — VPN status indicator CLI
 #
 # Subcommands:
-#   vpnii up [<tunnel>]     bring tunnel up (sudo wg-quick if a config exists,
-#                           manual cache otherwise; no arg = pick from configs)
-#   vpnii down [<tunnel>]   bring tunnel down (sudo wg-quick if managed,
-#                           clears manual cache otherwise; no arg = pick from active)
+#   vpnii up [<tunnel> [<profile>]]   bring tunnel up. wg-quick if a config
+#                           exists, manual cache otherwise. tailscale (or
+#                           VPNII_TS_NAME) routes to `tailscale up`, with
+#                           an optional profile for multi-tailnet setups.
+#                           No arg = pick from /etc/wireguard.
+#   vpnii down [<tunnel>]   bring tunnel down (wg-quick / cache / tailscale).
+#                           No arg = pick from active.
 #   vpnii list              list active tunnels (all sources, one per line)
 #   vpnii status            human-readable: "⬡ HomeLab" or "no active tunnels"
 #   vpnii clear             remove all manual state files (wg-quick unaffected)
@@ -33,6 +36,7 @@ source "${VPNII_HOME}/lib/vpnii.zsh"
 source "${VPNII_HOME}/lib/ui.zsh"
 source "${VPNII_HOME}/lib/strip.zsh"
 source "${VPNII_HOME}/lib/cmd-tunnel.zsh"
+source "${VPNII_HOME}/lib/cmd-tailscale.zsh"
 source "${VPNII_HOME}/lib/cmd-diag.zsh"
 source "${VPNII_HOME}/lib/cmd-setup.zsh"
 source "${VPNII_HOME}/lib/cmd-wizard.zsh"
@@ -44,13 +48,16 @@ _usage() {
 usage: vpnii <command> [args]
 
 Tunnel state:
-  up [<tunnel>]        bring up. With no arg: picks from /etc/wireguard configs
-                       (auto-selects when only one). sudo wg-quick if a config
-                       exists; manual cache fallback otherwise.
-  down [<tunnel>]      bring down. With no arg: picks from active tunnels.
-                       sudo wg-quick if managed; clears manual cache otherwise.
-  list                 list active tunnels — one per line, all sources
-  status               human-readable: "⬡ HomeLab" or "no active tunnels"
+  up [<tunnel> [<profile>]]
+                       bring up. With no arg: picks from /etc/wireguard configs.
+                       sudo wg-quick when a config exists; manual cache fallback.
+                       <tunnel>=tailscale (or VPNII_TS_NAME, default 'ts'):
+                       runs 'tailscale up'. <profile> picks a tailnet when more
+                       than one is configured (else prompts).
+  down [<tunnel>]      bring down. With no arg: picks from active tunnels (incl.
+                       tailscale when up). 'tailscale' runs 'tailscale down'.
+  list                 list active tunnels — one per line (excludes tailscale)
+  status               human-readable: "⬡ HomeLab  ⬢ ts" / "⊖ off"
   clear                remove all manual state files (wg-quick unaffected)
 
 Tools:

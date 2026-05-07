@@ -12,7 +12,7 @@ VPNII="${VPNII_HOME}/bin/vpnii"
 # `vpnii help` exits 1 (it's the usage path) but prints the banner.
 output=$("$VPNII" help 2>&1) || true
 assert_contains "$output" "usage: vpnii" "help: prints usage banner"
-assert_contains "$output" "up [<tunnel>]" "help: lists up command"
+assert_contains "$output" "up [<tunnel>" "help: lists up command"
 
 # Unknown command dies with a hint.
 output=$("$VPNII" frobnicate 2>&1) || true
