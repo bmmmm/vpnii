@@ -82,20 +82,32 @@ WireGuard configs are left unchanged.
 A single command with subcommands:
 
 ```
-vpnii up [<tunnel> [<profile>]]  bring up. wg-quick / cache / tailscale.
-                                 'tailscale' (or VPNII_TS_NAME, default 'ts')
-                                 routes to `tailscale up`. <profile> picks a
-                                 tailnet when more than one is configured.
-vpnii down [<tunnel>]   bring down (auto-pick from active incl. tailscale)
-vpnii list              list active tunnels (excludes tailscale; that's a
-                        separate indicator with its own state)
-vpnii status            human-readable: "⬡ HomeLab  ⬢ ts" / "⊖ off"
-vpnii clear             remove all manual state files (wg-quick unaffected)
-vpnii diag              show full vpnii status (incl. tailscale account)
-vpnii setup [-y] [<conf>...]      adaptive: maintenance for existing configs, wizard for empty
-vpnii export [-y] <conf> [<dir>]  read a wg config, strip hooks, write a clean copy (default cwd)
-vpnii install [-y] [-n NAME] <conf>   copy a clean wg config into /etc/wireguard, owned by you
+Tunnel state:
+  vpnii up [<tunnel> [<profile>]]   bring up. wg-quick / cache / tailscale.
+                                    'tailscale' (or VPNII_TS_NAME, default 'ts')
+                                    routes to `tailscale up`. <profile> picks
+                                    a tailnet when more than one is configured.
+  vpnii down [<tunnel>]             bring down (auto-pick from active incl. ts)
+  vpnii toggle <tunnel>             flip state (up if down, down if up)
+  vpnii reconnect <tunnel>          down + up in one step (fix stale handshake)
+
+Status:
+  vpnii list                        list active wg tunnels — one per line
+  vpnii status                      human-readable: "⬡ HomeLab  ⬢ ts" / "⊖ off"
+  vpnii statusline                  fixed-width status (cc-statusline / tmux)
+  vpnii where                       what each tunnel routes + default route
+  vpnii ip [-4 | -6]                external IP via DNS (sanity check after up/down)
+  vpnii diag                        full vpnii status (handshake age, tailscale account)
+  vpnii clear                       remove all manual state files
+
+Configs:
+  vpnii setup [-y] [<conf>...]      adaptive: maintenance / first-time wizard
+  vpnii install [-y] [-n NAME] <conf>   copy a clean wg config into /etc/wireguard
+  vpnii export  [-y] <conf> [<dir>]     read a wg config, strip hooks, write clean copy
 ```
+
+Tab completion (`vpnii up <TAB>`, `vpnii toggle <TAB>`, etc.) ships with the
+plugin and lights up after `compinit`.
 
 `vpnii up tailscale` works with the OSS install (`brew install tailscale`).
 The Mac App Store build sandboxes its CLI off from the daemon, so `tailscale
@@ -134,6 +146,8 @@ Set these before sourcing vpnii:
 | `VPNII_TS_SYM_ACTIVE` | `⬢` | Symbol when tailscale is connected |
 | `VPNII_TS_SYM_INACTIVE` | `⊖` | Symbol when tailscale is off |
 | `VPNII_TS_CLR_INACTIVE` | `%F{8}` | zsh prompt color for the "off" state |
+| `VPNII_STATUSLINE_WG_W` | `14` | Column width of the wg slot in `vpnii statusline` |
+| `VPNII_STATUSLINE_TS_W` | `5` | Column width of the tailscale slot in `vpnii statusline` |
 
 ## Public API
 
@@ -157,12 +171,27 @@ Output sections:
 
 | Section | What it checks |
 |---------|----------------|
-| Active tunnels | currently up — from `*.name` files and the cache dir |
+| Active tunnels | currently up — wg-quick `*.name` files + cache dir entries; per wg-tunnel: handshake age (green <3m, yellow 3-10m, red >10m / unavailable) |
+| Tailscale | active state, CGNAT IP, account name (App Store plist or OSS CLI) |
 | Detection sources | both source directories exist and are readable |
 | WireGuard binaries | `wg`, `wg-quick` resolvable in PATH |
 | vpnii | binary present and on PATH (or symlinked to `/usr/local/bin`) |
 | Shell integration | plugin sourced from `~/.zshrc` |
 | WireGuard configs | flags stale `vpnii(-state)` hooks in `/etc/wireguard/*.conf` |
+
+For "what does this tunnel actually route?", use `vpnii where`:
+
+```
+$ vpnii where
+HomeLab     → 192.168.189.0/24, 0.0.0.0/0  (full-tunnel)
+ts          → 100.64.0.0/10                (mesh)
+
+default v4  → 192.168.189.1 via en0  (direct, no VPN)
+```
+
+Tags: `full-tunnel` (config has `0.0.0.0/0` or `::/0`), `split` (selective
+prefixes), `mesh` (tailscale CGNAT). The default-route line is tagged
+`likely VPN-routed` when the system default exits via a `utun` interface.
 
 ## `vpnii setup`
 
@@ -288,7 +317,8 @@ vpnii clear
 | `lib/vpnii.zsh` | Detection logic, `_vpnii_precmd` hook, public `vpnii_active_tunnels` API |
 | `lib/ui.zsh` | UI primitives (printing, prompts, name validation) |
 | `lib/strip.zsh` | `_strip_to_file` — removes vpnii hooks from PostUp/PreDown lines |
-| `lib/cmd-*.zsh` | Per-subcommand modules: tunnel, diag, setup, wizard, install, export |
+| `lib/cmd-*.zsh` | Per-subcommand modules: tunnel, tailscale, toggle, where, statusline, ip, diag, setup, wizard, install, export |
+| `lib/_vpnii` | Zsh autoload tab completion |
 | `bin/vpnii` | CLI dispatcher — sources lib modules, routes subcommands |
 | `tests/run.zsh` | Test runner — pure-zsh, no deps |
 | `install.sh` / `uninstall.sh` | Adds/removes the source line in `~/.zshrc` and the PATH entry |
@@ -301,11 +331,16 @@ vpnii clear
 ./tests/run.zsh
 ```
 
-Pure-zsh harness, no dependencies. Covers:
-- `_strip_to_file` against fixture matrix (clean, foreign hooks, claudii
-  legacy, su-c form, sudo-u form, vpnii-state binary)
-- Detection dedup (`_vpnii_collect_tunnels`, `vpnii_active_tunnels`)
-- CLI smoke paths (help, status, list, clear, name validation)
+Pure-zsh harness, no dependencies. 100+ assertions covering:
+- `_strip_to_file` against the legacy-pattern fixture matrix
+- Detection (`_vpnii_collect_tunnels`, CGNAT range edges, account cache)
+- Tailscale CLI handling (sandboxed, single-profile, multi-profile)
+- Handshake age parsing (fresh, multi-peer, never-handshaked, denied)
+- CLI smoke paths (help, status, list, name validation)
+- `vpnii ip` with stubbed `dig` (multi-resolver fallback, TXT-quote stripping)
+- `vpnii where` (default-route detection, full vs split tunnel tags)
+- `vpnii statusline` (stable widths, ellipsis truncation, env overrides)
+- `vpnii toggle` / `reconnect` flow
 
 To run tests automatically before each push, opt into the bundled hook:
 
