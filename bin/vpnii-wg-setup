@@ -115,4 +115,15 @@ _ok "PostUp updated"
 _ok "PreDown updated"
 printf '\nResult:\n'
 grep -E '^(PostUp|PreDown)' "$config"
-printf '\nRun: sudo wg-quick down %s && sudo wg-quick up %s\n' "$tunnel_name" "$tunnel_name"
+
+printf '\nRestart tunnel now? [y/N] '
+read -r answer
+if [[ "${answer:l}" == "y" ]]; then
+  printf '  → wg-quick down %s\n' "$tunnel_name"
+  wg-quick down "$tunnel_name" 2>/dev/null || true
+  printf '  → wg-quick up %s\n' "$tunnel_name"
+  wg-quick up "$tunnel_name"
+  _ok "tunnel restarted"
+else
+  printf '\nRun: sudo wg-quick down %s && sudo wg-quick up %s\n' "$tunnel_name" "$tunnel_name"
+fi

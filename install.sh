@@ -36,10 +36,24 @@ else
   _yellow "→ /usr/local/bin not writable — added ${VPNII_HOME}/bin to PATH in $ZSHRC"
 fi
 
-# 3. Create cache dir
+# 3. Create cache dir + clean stale root-owned state files
 VPNII_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/vpnii"
 mkdir -p "$VPNII_CACHE_DIR"
 _green "✓ cache dir: $VPNII_CACHE_DIR"
+
+stale=()
+for f in "$VPNII_CACHE_DIR"/*(N); do
+  [[ -f "$f" ]] && [[ ! -O "$f" ]] && stale+=("$f")
+done
+if (( ${#stale} > 0 )); then
+  _yellow "→ stale root-owned state files: ${(j: :)stale:t}"
+  printf 'Remove them? [y/N] '
+  read -r answer
+  if [[ "${answer:l}" == "y" ]]; then
+    sudo rm -f "${stale[@]}"
+    _green "✓ stale state cleared"
+  fi
+fi
 
 # 4. Patch WireGuard configs
 printf '\n'
@@ -62,8 +76,7 @@ else
     printf 'Found: %s — patch PostUp/PreDown? [y/N] ' "$conf"
     read -r answer
     if [[ "${answer:l}" == "y" ]]; then
-      sudo "$VPNII_HOME/bin/vpnii-wg-setup" "$conf" && \
-        printf '  Restart to apply: sudo wg-quick down %s && sudo wg-quick up %s\n' "$name" "$name"
+      sudo "$VPNII_HOME/bin/vpnii-wg-setup" "$conf"
     else
       printf '  Skipped. Run manually: sudo %s/bin/vpnii-wg-setup %s\n' "$VPNII_HOME" "$conf"
     fi
