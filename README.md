@@ -342,12 +342,6 @@ Pure-zsh harness, no dependencies. 100+ assertions covering:
 - `vpnii statusline` (stable widths, ellipsis truncation, env overrides)
 - `vpnii toggle` / `reconnect` flow
 
-To run tests automatically before each push, opt into the bundled hook:
-
-```zsh
-git config core.hooksPath .githooks
-```
-
 ## Roadmap
 
 - [ ] macOS menu bar indicator (SwiftBar/xbar plugin)
