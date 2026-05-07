@@ -41,6 +41,7 @@ source "${VPNII_HOME}/lib/cmd-toggle.zsh"
 source "${VPNII_HOME}/lib/cmd-where.zsh"
 source "${VPNII_HOME}/lib/cmd-statusline.zsh"
 source "${VPNII_HOME}/lib/cmd-peers.zsh"
+source "${VPNII_HOME}/lib/cmd-config.zsh"
 source "${VPNII_HOME}/lib/cmd-ip.zsh"
 source "${VPNII_HOME}/lib/cmd-diag.zsh"
 source "${VPNII_HOME}/lib/cmd-setup.zsh"
@@ -83,6 +84,9 @@ Tools:
   export [-y] <conf> [<dir>]
                        read a wg config, strip vpnii hooks, write the clean
                        version to <dir>/<name>.conf (default <dir>: cwd)
+  edit <tunnel>        open /etc/wireguard/<name>.conf in $EDITOR
+  verify <conf>        pre-flight a config (sections, key shapes, hooks)
+  rename <old> <new>   rename a config + cache marker (refuses if up)
 EOF
   exit 1
 }
@@ -106,6 +110,9 @@ case "$cmd" in
   setup)          _cmd_setup "$@" ;;
   install)        _cmd_install "$@" ;;
   export)         _cmd_export "$@" ;;
+  edit)           _cmd_edit "$@" ;;
+  verify)         _cmd_verify "$@" ;;
+  rename)         _cmd_rename "$@" ;;
   -h|--help|help) _usage ;;
   *)              _die "unknown command: $cmd  (try 'vpnii help')" ;;
 esac

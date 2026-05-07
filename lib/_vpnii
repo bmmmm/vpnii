@@ -21,6 +21,9 @@ _vpnii() {
     'setup:maintain configs / first-time wizard'
     'install:copy a clean wg config to /etc/wireguard'
     'export:strip vpnii hooks from a wg config'
+    'edit:open a config in $EDITOR'
+    'verify:pre-flight a wg config (sections, key shapes, hooks)'
+    'rename:rename a config + cache marker'
     'help:show usage'
   )
 
@@ -68,8 +71,16 @@ _vpnii() {
       fi
       _describe -t tunnels 'active tunnel' active
       ;;
-    setup|install|export)
+    setup|install|export|verify)
       _files -g '*.conf'
+      ;;
+    edit|rename)
+      local -a names
+      local conf
+      for conf in /etc/wireguard/*.conf(N.); do
+        names+=("${conf:t:r}")
+      done
+      _describe -t tunnels 'tunnel' names
       ;;
     ip)
       local -a flags=('-4:IPv4 (default)' '-6:IPv6')
