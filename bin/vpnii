@@ -27,6 +27,7 @@ source "${VPNII_HOME}/lib/cmd-setup.zsh"
 source "${VPNII_HOME}/lib/cmd-wizard.zsh"
 source "${VPNII_HOME}/lib/cmd-install.zsh"
 source "${VPNII_HOME}/lib/cmd-export.zsh"
+source "${VPNII_HOME}/lib/cmd-dns.zsh"
 
 _usage() {
   cat >&2 <<'EOF'
@@ -47,6 +48,8 @@ Status:
   peers <tunnel>              per-peer table (handshake, endpoint, bytes)
   ip [-4 | -6]                external IP via DNS (sanity check after up/down)
   diag                        full status (handshake age, tailscale account)
+  dns <mode>                  toggle macOS DNS resolver
+                              (home / public / dhcp / show / services)
   clear                       remove all manual state files
 
 Configs:
@@ -78,6 +81,7 @@ case "$cmd" in
   ip)             _cmd_ip "$@" ;;
   clear)          _cmd_clear ;;
   diag)           _cmd_diag ;;
+  dns)            _cmd_dns "$@" ;;
   setup)          _cmd_setup "$@" ;;
   install)        _cmd_install "$@" ;;
   export)         _cmd_export "$@" ;;

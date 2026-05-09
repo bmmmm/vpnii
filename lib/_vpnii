@@ -18,6 +18,7 @@ _vpnii() {
     'ip:show current external IP'
     'clear:remove manual cache state'
     'diag:show full vpnii status'
+    'dns:toggle macOS DNS resolver (home/public/dhcp/show)'
     'setup:maintain configs / first-time wizard'
     'install:copy a clean wg config to /etc/wireguard'
     'export:strip vpnii hooks from a wg config'
@@ -88,6 +89,16 @@ _vpnii() {
     ip)
       local -a flags=('-4:IPv4 (default)' '-6:IPv6')
       _describe -t flags 'address family' flags
+      ;;
+    dns)
+      local -a modes=(
+        'show:display current DNS state'
+        'home:Pi-hole + 1.1.1.1 (IPv4-only, locks IPv6 bypass)'
+        'public:1.1.1.1 + 1.0.0.1 (foreign LAN / mobile)'
+        'dhcp:clear override → DHCP-default'
+        'services:list networksetup services (debug)'
+      )
+      _describe -t modes 'dns mode' modes
       ;;
   esac
 }
