@@ -59,18 +59,21 @@ function _vpnii_format_age {
 typeset -gr _VPNII_CGNAT_RE='inet 100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.'
 
 # Returns 0 if any local interface holds an IP in the CGNAT range.
+# Hot path — runs once per zsh prompt redraw. Captures ifconfig output once
+# and matches in-shell via zsh's =~ to avoid the grep fork.
 function _vpnii_tailscale_active {
-  ifconfig 2>/dev/null | grep -qE "$_VPNII_CGNAT_RE"
+  local out
+  out=$(ifconfig 2>/dev/null)
+  [[ "$out" =~ $_VPNII_CGNAT_RE ]]
 }
 
 # Echoes the first CGNAT IP found on a local interface (or empty if none).
 # Used by `vpnii diag` to surface the actual address; the active-check
-# above only needs a yes/no.
+# above only needs a yes/no. Single fork (ifconfig), regex extract in zsh.
 function _vpnii_tailscale_ip {
-  ifconfig 2>/dev/null \
-    | grep -oE "${_VPNII_CGNAT_RE}[0-9]+\.[0-9]+" \
-    | head -1 \
-    | awk '{print $2}'
+  local out
+  out=$(ifconfig 2>/dev/null)
+  [[ "$out" =~ ${_VPNII_CGNAT_RE}[0-9]+\.[0-9]+ ]] && print -- "${MATCH#inet }"
 }
 
 # Echoes the Tailscale account display name, or nothing if it can't be
