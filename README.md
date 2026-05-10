@@ -45,7 +45,7 @@ the indicator stays a stable width. Run `vpnii diag` to see it.
 ## Install
 
 ```zsh
-git clone ssh://git@git.home:2222/your-org/vpnii.git ~/path/to/vpnii
+git clone ssh://git@forgejo.example.com:2222/your-org/vpnii.git ~/path/to/vpnii
 cd ~/path/to/vpnii
 ./install.sh
 ```
