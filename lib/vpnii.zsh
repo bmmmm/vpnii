@@ -98,21 +98,23 @@ function _vpnii_tailscale_account {
     [[ -r "$plist" ]] || continue
     local tmp
     tmp=$(mktemp) || continue
-    if plutil -convert xml1 -o "$tmp" "$plist" 2>/dev/null; then
+    # EXIT trap inside subshell so an early return / continue still cleans
+    # up; the trap fires when the (...) subshell exits.
+    account=$(
+      trap 'rm -f "$tmp"' EXIT
+      plutil -convert xml1 -o "$tmp" "$plist" 2>/dev/null || exit 0
       # The blob has two DisplayName fields (UserProfile and NetworkProfile),
       # in unstable JSON-key order. NetworkProfile.DisplayName is often
-      # empty, so we filter to the first non-empty match — that's the
-      # account name we want.
-      account=$(awk '
+      # empty, so we filter to the first non-empty match.
+      awk '
         /<key>com\.tailscale\.cached\.currentProfile<\/key>/{f=1; next}
         f && /<data>/{f=2; next}
         f==2 && /<\/data>/{exit}
         f==2{print}
       ' "$tmp" | tr -d ' \t\n' | base64 -D 2>/dev/null \
         | grep -oE '"DisplayName":"[^"]+"' | head -1 \
-        | sed -E 's/.*:"([^"]*)".*/\1/')
-    fi
-    rm -f "$tmp"
+        | sed -E 's/.*:"([^"]*)".*/\1/'
+    )
     [[ -n "$account" ]] && break
   done
 

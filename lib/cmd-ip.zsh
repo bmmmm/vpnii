@@ -42,7 +42,7 @@ _cmd_ip() {
   for entry in "${sources[@]}"; do
     IFS=: read -r resolver host qtype <<<"$entry"
     ip=$(dig "+short" "+time=3" "+tries=1" "-${family}" "$qtype" "$host" "@${resolver}" 2>/dev/null \
-      | tr -d '"\r\n ' | head -1) || ip=""
+      | tr -d '"\r\n ') || ip=""
     if [[ -n "$ip" ]]; then
       printf '%s  (via %s)\n' "$ip" "$resolver"
       return 0

@@ -59,8 +59,10 @@ _cmd_where() {
   local def_line gw iface
   def_line=$(netstat -rn -f inet 2>/dev/null | awk '$1 == "default" { print; exit }')
   if [[ -n "$def_line" ]]; then
-    gw=$(printf '%s' "$def_line" | awk '{print $2}')
-    iface=$(printf '%s' "$def_line" | awk '{print $4}')
+    # Split the netstat row in zsh; columns are: dest gw flags ifr (BSD).
+    local -a fields=(${=def_line})
+    gw="${fields[2]}"
+    iface="${fields[4]}"
     # If default goes via utun while a 0.0.0.0/0 wg is up, that's the VPN
     # carrying it. Otherwise default is direct (either no VPN or split-only).
     if [[ "$iface" == utun* ]]; then

@@ -149,6 +149,13 @@ Set before sourcing. Common knobs:
 | `VPNII_TS_SYM_ACTIVE` | `⬢` | tailscale-up indicator |
 | `VPNII_TS_SYM_INACTIVE` | `⊖` | tailscale-off indicator |
 
+DNS subcommand:
+
+| Variable | Default | What |
+|----------|---------|------|
+| `VPNII_DNS_SERVICE` | _auto_ | force a `networksetup` service name (e.g. `"USB 10/100/1000 LAN"`) instead of letting `vpnii dns` pick the one carrying the default route |
+| `VPNII_DNS_PIHOLE` | `192.168.189.4` | Pi-hole IP used by `vpnii dns home` (apply + adblock-test) |
+
 Less-used: `VPNII_WG_DIR`, `VPNII_CACHE_DIR`, `VPNII_CLR_ACTIVE`,
 `VPNII_CLR_RESET`, `VPNII_TS_CLR_INACTIVE`, `VPNII_STATUSLINE_WG_W`,
 `VPNII_STATUSLINE_TS_W`. See `lib/vpnii.zsh` for the full set with defaults.

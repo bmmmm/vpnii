@@ -43,20 +43,19 @@ _cmd_verify() {
     issues=$(( issues + 1 ))
   fi
 
-  # PrivateKey: exactly one in [Interface], 44-char base64.
-  local pk_count pk
-  pk_count=$(grep -cE '^[[:space:]]*PrivateKey[[:space:]]*=' "$conf")
-  if (( pk_count == 0 )); then
+  # PrivateKey: exactly one in [Interface], 44-char base64. Single grep
+  # returns all lines; we count and validate the first in one pass.
+  local -a pk_lines
+  pk_lines=("${(@f)$(grep -E '^[[:space:]]*PrivateKey[[:space:]]*=' "$conf")}")
+  [[ -z "${pk_lines[1]}" ]] && pk_lines=()
+  if (( ${#pk_lines} == 0 )); then
     _err "PrivateKey missing"; issues=$(( issues + 1 ))
-  elif (( pk_count > 1 )); then
-    _err "$pk_count PrivateKey lines (should be exactly 1)"; issues=$(( issues + 1 ))
+  elif (( ${#pk_lines} > 1 )); then
+    _err "${#pk_lines} PrivateKey lines (should be exactly 1)"; issues=$(( issues + 1 ))
+  elif [[ "${pk_lines[1]}" =~ '=[[:space:]]*[A-Za-z0-9+/]{43}=[[:space:]]*$' ]]; then
+    _ok "PrivateKey shape valid (44-char base64)"
   else
-    pk=$(grep -E '^[[:space:]]*PrivateKey[[:space:]]*=' "$conf" | sed -E 's/^[[:space:]]*PrivateKey[[:space:]]*=[[:space:]]*//' | head -1)
-    if [[ "$pk" =~ ^[A-Za-z0-9+/]{43}=$ ]]; then
-      _ok "PrivateKey shape valid (44-char base64)"
-    else
-      _err "PrivateKey doesn't look like a wg key (expected 44 chars base64)"; issues=$(( issues + 1 ))
-    fi
+    _err "PrivateKey doesn't look like a wg key (expected 44 chars base64)"; issues=$(( issues + 1 ))
   fi
 
   # PublicKey: at least one, each 44-char base64.
