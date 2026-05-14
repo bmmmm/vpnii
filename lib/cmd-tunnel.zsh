@@ -141,8 +141,8 @@ _cmd_list() {
 }
 
 _cmd_status() {
+  local -a reply parts=()
   _vpnii_collect_tunnels
-  local -a parts=()
   if (( ${#reply} > 0 )); then
     parts+=("$VPNII_SYM_VPN ${(j:, :)reply}")
   fi

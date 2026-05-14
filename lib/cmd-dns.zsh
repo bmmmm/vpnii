@@ -162,6 +162,8 @@ modes:
 env:
   VPNII_DNS_SERVICE     override auto-detected service
                         (e.g. "USB 10/100/1000 LAN" instead of Wi-Fi)
+  VPNII_DNS_PIHOLE      Pi-hole IP for `home` mode + adblock test
+                        (default: 192.168.189.4)
 
 note: no `sudo` prefix needed. networksetup triggers a GUI auth prompt
 (once per session if your account lacks admin context). DNS cache flush
@@ -179,9 +181,10 @@ _cmd_dns() {
       ;;
     home)
       local svc; svc=$(_dns_resolve_service) || _die "service detection failed"
+      local pihole_ip="${VPNII_DNS_PIHOLE:-192.168.189.4}"
       _hdr "Setting home DNS (Pi-hole + 1.1.1.1, IPv4-only)"
       _info "Locks out FritzBox-IPv6 bypass that skips adblock"
-      _dns_set "$svc" 192.168.189.4 1.1.1.1
+      _dns_set "$svc" "$pihole_ip" 1.1.1.1
       printf '\n'
       _dns_show
       printf '\n'

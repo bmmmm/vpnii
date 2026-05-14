@@ -33,8 +33,17 @@ _cmd_toggle() {
 _cmd_reconnect() {
   [[ $# -eq 1 ]] || _die "usage: vpnii reconnect <name>"
   local name="$1"
-  _validate_name "$name"
 
+  # Tailscale short-circuit before _validate_name, matching _cmd_toggle/_cmd_down.
+  if _is_tailscale_name "$name"; then
+    _info "reconnect: down then up"
+    _cmd_tailscale_down || true
+    printf '\n'
+    _cmd_tailscale_up
+    return
+  fi
+
+  _validate_name "$name"
   _info "reconnect: down then up"
   _cmd_down "$name" || true
   printf '\n'
