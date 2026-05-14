@@ -62,13 +62,15 @@ _cmd_tailscale_up() {
       profile="$REPLY"
     fi
     _info "tailscale switch $profile"
-    _tailscale_invoke switch "$profile" || _die "switch failed"
+    _tailscale_invoke switch "$profile" \
+      || _die "tailscale switch failed (see CLI output above; try: vpnii diag)"
   elif [[ -n "$profile" ]]; then
     _warn "only one profile configured — ignoring '$profile'"
   fi
 
   _info "tailscale up"
-  _tailscale_invoke up || _die "tailscale up failed"
+  _tailscale_invoke up \
+    || _die "tailscale up failed (see CLI output above; try: vpnii diag)"
   printf '\n'
   _ok "tailscale up"
 }
@@ -78,7 +80,8 @@ _cmd_tailscale_down() {
     _tailscale_sandboxed_die
   fi
   _info "tailscale down"
-  _tailscale_invoke down || _die "tailscale down failed"
+  _tailscale_invoke down \
+    || _die "tailscale down failed (see CLI output above; try: vpnii diag)"
   printf '\n'
   _ok "tailscale down"
 }

@@ -9,10 +9,17 @@ mkdir -p "$VPNII_WG_DIR" "$VPNII_CACHE_DIR"
 
 VPNII="${VPNII_HOME}/bin/vpnii"
 
-# `vpnii help` exits 1 (it's the usage path) but prints the banner.
-output=$("$VPNII" help 2>&1) || true
+# Explicit `vpnii help` is intentional input — exits 0, prints banner.
+output=$("$VPNII" help 2>&1)
+exit_code=$?
+assert_eq "$exit_code" "0" "help: exits 0 when invoked explicitly"
 assert_contains "$output" "usage: vpnii" "help: prints usage banner"
 assert_contains "$output" "up [<tunnel>" "help: lists up command"
+
+# Bare `vpnii` (no args) is a usage error — exits 1.
+"$VPNII" >/dev/null 2>&1
+exit_code=$?
+assert_eq "$exit_code" "1" "no-arg: exits 1 (usage error)"
 
 # Unknown command dies with a hint.
 output=$("$VPNII" frobnicate 2>&1) || true

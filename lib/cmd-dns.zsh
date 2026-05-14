@@ -57,7 +57,8 @@ _dns_resolve_service() {
 }
 
 _dns_show() {
-  local svc; svc=$(_dns_resolve_service) || _die "service detection failed"
+  local svc; svc=$(_dns_resolve_service) \
+    || _die "no service to act on  (try: vpnii dns services, then: VPNII_DNS_SERVICE=<name> vpnii dns ...)"
   _hdr "Active service: $svc"
   local override
   override=$(networksetup -getdnsservers "$svc" 2>&1 || true)
@@ -180,7 +181,8 @@ _cmd_dns() {
       _dns_show
       ;;
     home)
-      local svc; svc=$(_dns_resolve_service) || _die "service detection failed"
+      local svc; svc=$(_dns_resolve_service) \
+    || _die "no service to act on  (try: vpnii dns services, then: VPNII_DNS_SERVICE=<name> vpnii dns ...)"
       local pihole_ip="${VPNII_DNS_PIHOLE:-192.168.189.4}"
       _hdr "Setting home DNS (Pi-hole + 1.1.1.1, IPv4-only)"
       _info "Locks out FritzBox-IPv6 bypass that skips adblock"
@@ -193,7 +195,8 @@ _cmd_dns() {
       _dns_flush_cache
       ;;
     public)
-      local svc; svc=$(_dns_resolve_service) || _die "service detection failed"
+      local svc; svc=$(_dns_resolve_service) \
+    || _die "no service to act on  (try: vpnii dns services, then: VPNII_DNS_SERVICE=<name> vpnii dns ...)"
       _hdr "Setting public DNS (1.1.1.1 + 1.0.0.1)"
       _dns_set "$svc" 1.1.1.1 1.0.0.1
       printf '\n'
@@ -201,7 +204,8 @@ _cmd_dns() {
       _dns_flush_cache
       ;;
     dhcp)
-      local svc; svc=$(_dns_resolve_service) || _die "service detection failed"
+      local svc; svc=$(_dns_resolve_service) \
+    || _die "no service to act on  (try: vpnii dns services, then: VPNII_DNS_SERVICE=<name> vpnii dns ...)"
       _hdr "Clearing DNS override on $svc → DHCP-default"
       _dns_set "$svc" empty
       printf '\n'

@@ -130,7 +130,9 @@ _cmd_rename() {
   if [[ ! -w "$old_conf" || ! -w "$(dirname "$old_conf")" ]]; then
     _die "config or its directory not writable as $USER  (run: vpnii setup)"
   fi
-  mv "$old_conf" "$new_conf" || _die "rename failed"
+  local mv_err
+  mv_err=$(mv "$old_conf" "$new_conf" 2>&1) \
+    || _die "rename failed: ${mv_err:-unknown reason}  (check perms / cross-FS)"
   _ok "renamed $old → $new  ($new_conf)"
 
   if [[ -f "${VPNII_CACHE_DIR}/${old}" ]]; then

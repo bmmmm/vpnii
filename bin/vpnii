@@ -30,6 +30,9 @@ source "${VPNII_HOME}/lib/cmd-export.zsh"
 source "${VPNII_HOME}/lib/cmd-dns.zsh"
 
 _usage() {
+  # When invoked explicitly (vpnii help / -h / --help) caller passes 0;
+  # bare `vpnii` with no command is a usage-error, caller passes 1.
+  local rc="${1:-1}"
   cat >&2 <<'EOF'
 usage: vpnii <command> [args]
 
@@ -62,10 +65,10 @@ Configs:
 
 Env: VPNII_TS_NAME (default "ts"), VPNII_TS_ENABLED, VPNII_STATUSLINE_*.
 EOF
-  exit 1
+  exit "$rc"
 }
 
-[[ $# -eq 0 ]] && _usage
+[[ $# -eq 0 ]] && _usage 1
 cmd="$1"; shift
 
 case "$cmd" in
@@ -88,6 +91,6 @@ case "$cmd" in
   edit)           _cmd_edit "$@" ;;
   verify)         _cmd_verify "$@" ;;
   rename)         _cmd_rename "$@" ;;
-  -h|--help|help) _usage ;;
+  -h|--help|help) _usage 0 ;;
   *)              _die "unknown command: $cmd  (try 'vpnii help')" ;;
 esac
