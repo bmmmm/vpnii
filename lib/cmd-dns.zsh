@@ -117,17 +117,21 @@ _dns_test_adblock() {
   local hits_system=0 disagrees=0
   local first_direct first_system
 
+  # Note: post-increment `(( var++ ))` would crash this function under
+  # bin/vpnii's `set -e`, because the expression's value is the *pre*-
+  # increment number — when var is 0 that's a falsy zero and zsh returns
+  # exit 1. Use explicit assignment to keep the exit status truthy.
   local d direct system
   for d in "${probes[@]}"; do
     direct=$(dig +short +time=2 +tries=1 "$d" "@${pihole_ip}" 2>/dev/null | head -1)
     system=$(dig +short +time=2 +tries=1 "$d" 2>/dev/null | head -1)
     if [[ "$direct" == "0.0.0.0" ]]; then
-      (( hits_direct++ ))
+      hits_direct=$(( hits_direct + 1 ))
     elif [[ -z "$direct" ]]; then
-      (( unreach_direct++ ))
+      unreach_direct=$(( unreach_direct + 1 ))
     fi
-    [[ "$system" == "0.0.0.0" ]] && (( hits_system++ ))
-    [[ "$direct" != "$system" ]] && (( disagrees++ ))
+    [[ "$system" == "0.0.0.0" ]] && hits_system=$(( hits_system + 1 ))
+    [[ "$direct" != "$system" ]] && disagrees=$(( disagrees + 1 ))
     [[ -z "$first_direct" ]] && { first_direct="$direct"; first_system="$system"; }
   done
 
