@@ -13,11 +13,20 @@ on:
     branches: [main]
   pull_request:
 
+# Cancel an in-flight run on the same ref when a new push arrives. Saves
+# slots on the runner (capacity 3, shared with the 280HWW cron) — rapid
+# fix-up commits to main no longer queue behind their predecessor.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: docker
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Install zsh
         run: |
@@ -31,6 +40,8 @@ jobs:
     runs-on: docker
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Install shellcheck
         run: |
@@ -47,6 +58,8 @@ jobs:
     runs-on: docker
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       # Refuse merges that leave TODO/FIXME/XXX markers in code. The
       # explicit char-class boundaries are portable across BSD and GNU
