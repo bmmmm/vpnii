@@ -18,6 +18,10 @@
 
 : "${VPNII_CACHE_DIR:=${XDG_CACHE_HOME:-$HOME/.cache}/vpnii}"
 : "${VPNII_WG_DIR:=/var/run/wireguard}"
+# Container envs (e.g. CI base images) often run as root with USER unset.
+# Under `set -u` that turns every `$USER` reference into a fatal error;
+# derive from `id -un` so install / setup / config paths keep working.
+: "${USER:=$(id -un 2>/dev/null || echo root)}"
 : "${VPNII_SYM_VPN:=⬡}"
 : "${VPNII_TS_ENABLED:=1}"
 : "${VPNII_TS_NAME:=ts}"

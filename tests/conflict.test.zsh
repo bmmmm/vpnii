@@ -56,10 +56,11 @@ EOF
 _is_full_tunnel "$tmpdir/typo.conf"
 assert_eq "$?" "1" "10.0.0.0/0 (typo, not the default route) → not full"
 
-# 7. Unreadable file → returns 1 (not full, defensive).
-chmod 000 "$tmpdir/full-v4.conf"
-_is_full_tunnel "$tmpdir/full-v4.conf"
+# 7. Non-existent file → returns 1 (not full, defensive). Originally used
+# `chmod 000` to test unreadability, but root in CI containers bypasses file
+# perms and reads anyway. A path that doesn't exist exercises the same
+# defensive branch (`[[ -r "$conf" ]]` is false) without depending on uid.
+_is_full_tunnel "$tmpdir/does-not-exist.conf"
 assert_eq "$?" "1" "unreadable file → not full (defensive)"
-chmod 644 "$tmpdir/full-v4.conf"
 
 rm -rf "$tmpdir"

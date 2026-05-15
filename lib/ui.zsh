@@ -12,9 +12,13 @@ _hdr()   { printf '\n\033[1m%s\033[0m\n' "$*"; }
 _phase() { printf '\n\033[2m──\033[0m \033[1m%s\033[0m\n' "$*"; }
 
 # stat is BSD on macOS, GNU on Linux — different flags for the same field.
+# Try GNU's -c first: BSD stat doesn't recognise -c and errors out cleanly.
+# BSD's -f does NOT fail under GNU stat (GNU reinterprets it as --file-system
+# and prints filesystem info instead of the owner), so the GNU-first order
+# is required — otherwise GNU returns a misleading non-empty success.
 # Falls back to '?' so callers can still compare the result safely.
 _file_owner() {
-  stat -f '%Su' "$1" 2>/dev/null || stat -c '%U' "$1" 2>/dev/null || echo '?'
+  stat -c '%U' "$1" 2>/dev/null || stat -f '%Su' "$1" 2>/dev/null || echo '?'
 }
 
 # Tunnel names are used as path components (state files, .conf names).

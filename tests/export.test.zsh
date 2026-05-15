@@ -75,8 +75,10 @@ fi
 assert_contains "$(cat "$target")" "PrivateKey = $VALID_PRIV" "export: PrivateKey preserved"
 assert_contains "$(cat "$target")" "Endpoint = 1.2.3.4:51820" "export: Endpoint preserved"
 
-# 5. Mode is 0600. stat is BSD on macOS, GNU on Linux — try both.
-mode=$(stat -f '%Lp' "$target" 2>/dev/null || stat -c '%a' "$target" 2>/dev/null)
+# 5. Mode is 0600. stat is BSD on macOS, GNU on Linux — try both. GNU first
+# because BSD stat fails cleanly on -c, while GNU stat reinterprets BSD's -f
+# as --file-system and "succeeds" with verbose filesystem info.
+mode=$(stat -c '%a' "$target" 2>/dev/null || stat -f '%Lp' "$target" 2>/dev/null)
 assert_eq "$mode" "600" "export: target mode is 0600"
 
 # 6. Dest dir auto-created.
