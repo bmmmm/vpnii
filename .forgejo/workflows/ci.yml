@@ -1,9 +1,12 @@
 name: CI
 
 # Mirror-gate: must pass before pushes are considered safe to mirror to
-# GitHub. Forgejo Actions on a Linux runner; no macOS dependency since
-# the test suite stubs every system binary (route, networksetup, dig,
-# ifconfig, sudo, wg-quick, tailscale).
+# GitHub. Forgejo Actions on the runner-host runner — `runs-on: docker` matches
+# its registered label `docker:docker://data.forgejo.org/oci/node:20-bullseye`,
+# so jobs execute in that node image (debian bullseye, runs as root,
+# no sudo needed). The test suite has no macOS dependency since every
+# system binary is stubbed (route, networksetup, dig, ifconfig, sudo,
+# wg-quick, tailscale).
 
 on:
   push:
@@ -12,25 +15,27 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: docker
     steps:
       - uses: actions/checkout@v4
 
       - name: Install zsh
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -qq -y zsh
+          apt-get update -qq
+          apt-get install -qq -y zsh
 
       - name: Run test suite
         run: tests/run.zsh
 
   shellcheck:
-    runs-on: ubuntu-latest
+    runs-on: docker
     steps:
       - uses: actions/checkout@v4
 
       - name: Install shellcheck
-        run: sudo apt-get install -qq -y shellcheck
+        run: |
+          apt-get update -qq
+          apt-get install -qq -y shellcheck
 
       # install.sh / uninstall.sh are zsh, not POSIX/bash — shellcheck
       # would refuse them. Only scripts/*.sh ship with a #!/bin/bash
@@ -39,7 +44,7 @@ jobs:
         run: shellcheck scripts/*.sh
 
   todo-lint:
-    runs-on: ubuntu-latest
+    runs-on: docker
     steps:
       - uses: actions/checkout@v4
 
