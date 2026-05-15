@@ -14,8 +14,8 @@ _setup_wizard() {
   printf '\033[2m(no configs in /etc/wireguard)\033[0m\n'
 
   _phase "Dependencies"
-  command -v wg-quick &>/dev/null || _die "wg-quick not found  (install with: brew install wireguard-tools)"
-  command -v wg       &>/dev/null || _die "wg not found  (install with: brew install wireguard-tools)"
+  _require_wg_quick
+  _require_wg
   _ok "wg-quick: $(command -v wg-quick)"
   _ok "wg:       $(command -v wg)"
 

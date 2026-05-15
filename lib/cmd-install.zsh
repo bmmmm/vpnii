@@ -22,9 +22,7 @@ _cmd_install() {
   [[ -f "$source" ]] || _die "not found: $source"
   [[ -r "$source" ]] || _die "not readable: $source"
 
-  if ! command -v wg-quick &>/dev/null; then
-    _die "wg-quick not found  (install with: brew install wireguard-tools)"
-  fi
+  _require_wg_quick
 
   if grep -qE "vpnii(-state)?" "$source" 2>/dev/null; then
     _die "$source contains vpnii hooks — clean first: vpnii setup $source"

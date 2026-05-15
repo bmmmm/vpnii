@@ -13,6 +13,7 @@ umask 077
 VPNII_HOME="${0:A:h:h}"
 source "${VPNII_HOME}/lib/vpnii.zsh"
 source "${VPNII_HOME}/lib/ui.zsh"
+source "${VPNII_HOME}/lib/preflight.zsh"
 source "${VPNII_HOME}/lib/strip.zsh"
 source "${VPNII_HOME}/lib/cmd-tunnel.zsh"
 source "${VPNII_HOME}/lib/cmd-tailscale.zsh"

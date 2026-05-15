@@ -19,20 +19,9 @@ _tailscale_invoke() {
   return $rc
 }
 
-_tailscale_cli_works() {
-  command -v tailscale &>/dev/null || return 1
-  local out
-  out=$(tailscale status --json 2>&1)
-  [[ "$out" != *"Tailscale CLI failed"* ]]
-}
-
-_tailscale_sandboxed_die() {
-  _err "tailscale CLI can't reach the daemon"
-  printf '      The Mac App Store build sandboxes its CLI off — toggle\n'
-  printf '      tailscale via the menu bar app instead. Or install the\n'
-  printf '      OSS build (brew install tailscale) for CLI control.\n'
-  exit 1
-}
+# _tailscale_cli_works / _tailscale_sandboxed_die / _require_tailscale_cli
+# live in lib/preflight.zsh — single source of truth for "can the CLI
+# actually reach the daemon?" preflight.
 
 # Lists configured profiles, one per line: "<id> <name> ..." (the raw
 # table row from `tailscale switch --list`, header stripped, trailing
@@ -44,9 +33,7 @@ _tailscale_list_profiles() {
 
 _cmd_tailscale_up() {
   local profile="${1:-}"
-  if ! _tailscale_cli_works; then
-    _tailscale_sandboxed_die
-  fi
+  _require_tailscale_cli
 
   # Multi-profile setup: pick one if not specified.
   local -a profiles=( ${(f)"$(_tailscale_list_profiles)"} )
@@ -76,9 +63,7 @@ _cmd_tailscale_up() {
 }
 
 _cmd_tailscale_down() {
-  if ! _tailscale_cli_works; then
-    _tailscale_sandboxed_die
-  fi
+  _require_tailscale_cli
   _info "tailscale down"
   _tailscale_invoke down \
     || _die "tailscale down failed (see CLI output above; try: vpnii diag)"

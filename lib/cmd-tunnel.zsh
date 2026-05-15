@@ -74,7 +74,7 @@ _cmd_up() {
       fi
     fi
 
-    command -v wg-quick &>/dev/null || _die "wg-quick not found  (install with: brew install wireguard-tools)"
+    _require_wg_quick
     _info "sudo wg-quick up $name"
     sudo wg-quick up "$name"
     printf '\n'
@@ -121,7 +121,7 @@ _cmd_down() {
 
   # If wg-quick manages it (active or known config), tear it down via wg-quick.
   if [[ -f "$wg_marker" || -f "$conf" ]]; then
-    command -v wg-quick &>/dev/null || _die "wg-quick not found  (install with: brew install wireguard-tools)"
+    _require_wg_quick
     _info "sudo wg-quick down $name"
     sudo wg-quick down "$name"
     printf '\n'

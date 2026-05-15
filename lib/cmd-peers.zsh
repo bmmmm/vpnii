@@ -26,9 +26,7 @@ _cmd_peers() {
   # Tailscale: pass through the CLI's table. Sandboxed App Store build
   # can't reach the daemon, so we surface that explicitly.
   if _is_tailscale_name "$name"; then
-    if ! _tailscale_cli_works; then
-      _tailscale_sandboxed_die
-    fi
+    _require_tailscale_cli
     tailscale status 2>&1
     return
   fi
@@ -38,7 +36,7 @@ _cmd_peers() {
     _die "$name is not active"
   fi
 
-  command -v wg &>/dev/null || _die "wg not in PATH  (install with: brew install wireguard-tools)"
+  _require_wg
 
   # `wg show <name> dump` may need sudo on macOS — the runtime socket is
   # often root-owned. We try without first; if it fails, surface a hint
