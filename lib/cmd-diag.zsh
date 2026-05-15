@@ -113,7 +113,7 @@ _cmd_diag() {
     local any=0 conf
     for conf in "$wg_dir"/*.conf(N.); do
       any=1
-      if grep -qE "vpnii(-state)?" "$conf" 2>/dev/null; then
+      if _vpnii_has_hooks "$conf"; then
         _warn "${conf:t}: has stale vpnii hooks (harmless, but can be cleaned)"
         printf '      → vpnii setup %s\n' "$conf"
       else

@@ -24,7 +24,7 @@ _cmd_install() {
 
   _require_wg_quick
 
-  if grep -qE "vpnii(-state)?" "$source" 2>/dev/null; then
+  if _vpnii_has_hooks "$source"; then
     _die "$source contains vpnii hooks — clean first: vpnii setup $source"
   fi
 

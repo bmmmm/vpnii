@@ -47,7 +47,7 @@ _cmd_export() {
   _strip_to_file "$source" "$target"
   chmod 600 "$target"
 
-  if grep -qE "vpnii(-state)?" "$target" 2>/dev/null; then
+  if _vpnii_has_hooks "$target"; then
     _warn "still contains vpnii references — manual review needed at $target"
   else
     _ok "exported clean to $target (mode 0600)"

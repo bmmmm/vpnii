@@ -27,6 +27,14 @@
 (( ${+VPNII_CLR_RESET} ))       || VPNII_CLR_RESET='%f'
 (( ${+VPNII_TS_CLR_INACTIVE} )) || VPNII_TS_CLR_INACTIVE='%F{8}'
 
+# Returns 0 if a wg config still contains legacy vpnii(-state) PostUp/PreDown
+# hooks from older versions. Used by install / setup / export before they
+# either strip them or refuse the file. Centralised so the regex stays in
+# sync — drift here once shipped a broken `export` that missed the hooks.
+function _vpnii_has_hooks {
+  grep -qE "vpnii(-state)?" "$1" 2>/dev/null
+}
+
 # Echoes the latest-handshake age in seconds for a wg-quick tunnel, or
 # returns non-zero if unavailable (tunnel down, sudo needed, no peers
 # handshaked yet). `wg show <name> latest-handshakes` outputs one

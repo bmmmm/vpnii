@@ -88,7 +88,7 @@ _setup_one() {
     _err "not readable — skipping hook check"
     return
   fi
-  if grep -qE "vpnii(-state)?" "$conf" 2>/dev/null; then
+  if _vpnii_has_hooks "$conf"; then
     _warn "stale vpnii hooks found in PostUp/PreDown"
     if _ask "Strip them?"; then
       _strip_hooks "$conf"

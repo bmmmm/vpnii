@@ -168,3 +168,48 @@ _cmd_clear() {
     rm -rf "${VPNII_CACHE_DIR}/backups"
   fi
 }
+
+# `vpnii toggle <name>`: if active, take it down; otherwise bring it up.
+# Active means: a wg-quick .name marker exists, a cache file exists, or
+# (for the tailscale name) an interface holds a CGNAT IP.
+_cmd_toggle() {
+  [[ $# -eq 1 ]] || _die "usage: vpnii toggle <name>"
+  local name="$1"
+
+  if _is_tailscale_name "$name"; then
+    if _vpnii_tailscale_active; then
+      _cmd_tailscale_down
+    else
+      _cmd_tailscale_up
+    fi
+    return
+  fi
+
+  _validate_name "$name"
+  if [[ -f "${VPNII_WG_DIR}/${name}.name" || -f "${VPNII_CACHE_DIR}/${name}" ]]; then
+    _cmd_down "$name"
+  else
+    _cmd_up "$name"
+  fi
+}
+
+# `vpnii reconnect <name>`: down + up at once. Useful when a tunnel goes
+# stale (no recent handshake, DERP relay change for tailscale, etc.).
+_cmd_reconnect() {
+  [[ $# -eq 1 ]] || _die "usage: vpnii reconnect <name>"
+  local name="$1"
+
+  if _is_tailscale_name "$name"; then
+    _info "reconnect: down then up"
+    _cmd_tailscale_down || true
+    printf '\n'
+    _cmd_tailscale_up
+    return
+  fi
+
+  _validate_name "$name"
+  _info "reconnect: down then up"
+  _cmd_down "$name" || true
+  printf '\n'
+  _cmd_up "$name"
+}
