@@ -229,6 +229,34 @@ Pure zsh, no deps. ~140 assertions across 12 files cover strip, detection,
 tailscale CLI, handshake parsing, CLI smoke, ip, where, statusline,
 toggle, peers, conflict detection, config verify.
 
+## Design notes
+
+vpnii started as a claudii submodule and was extracted to stand on its own.
+A few decisions diverge from the original concept and are worth calling out:
+
+- **No vpnii-owned state file for wg-quick.** wg-quick already writes a
+  `<name>.name` file into `/var/run/wireguard/` when a tunnel comes up and
+  removes it on teardown. vpnii reads that directly — no PostUp/PreDown
+  hooks, no daemon, no sudo at runtime. The earlier design (write a marker
+  from a PostUp hook) is *actively* stripped by `vpnii setup` / `vpnii
+  export` because it duplicated state wg-quick already exposes.
+- **Cache dir is for non-wg-quick markers only.**
+  `${XDG_CACHE_HOME:-$HOME/.cache}/vpnii/<name>` is where Passepartout-style
+  flows or scripts can drop a one-file-per-tunnel marker so the indicator
+  picks them up. Multiple concurrent tunnels are supported — one file per
+  tunnel name.
+- **Tailscale uses pure system state too.** CGNAT IP detection via
+  `ifconfig` works for the App Store / macsys build, which sandboxes its
+  CLI away from the daemon socket; the OSS CLI is only used to enrich the
+  account name in `vpnii diag`.
+- **No claudii dependency.** vpnii has zero references to claudii at
+  runtime; claudii can still source `vpnii.plugin.zsh` if it wants to
+  reuse the indicator.
+- **oh-my-zsh / standalone parity.** `vpnii.plugin.zsh` registers
+  `_vpnii_precmd` via `add-zsh-hook precmd` only in interactive shells, so
+  the same file works as an oh-my-zsh plugin, a zinit fragment, or a plain
+  `source` line in `.zshrc`.
+
 ## Roadmap
 
 - [ ] macOS menu bar indicator (SwiftBar/xbar plugin)
