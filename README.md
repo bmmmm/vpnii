@@ -225,9 +225,11 @@ configure password-less sudo for that command.
 ./tests/run.zsh
 ```
 
-Pure zsh, no deps. ~140 assertions across 12 files cover strip, detection,
-tailscale CLI, handshake parsing, CLI smoke, ip, where, statusline,
-toggle, peers, conflict detection, config verify.
+Pure zsh, no deps. ~230 assertions across 19 files cover strip, detection,
+tailscale CLI, handshake parsing, CLI smoke, ip, where, statusline, toggle,
+peers, conflict detection, config verify, setup, install, uninstall, and dns.
+The runner flags any file that crashes or has a syntax error rather than
+silently skipping it.
 
 ## Design notes
 

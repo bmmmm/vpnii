@@ -35,7 +35,7 @@ _cmd_diag() {
   fi
   (( found )) || printf '  no active tunnels\n'
 
-  if [[ "$VPNII_TS_ENABLED" == "1" ]]; then
+  if [[ "${VPNII_TS_ENABLED:-1}" == "1" ]]; then
     _hdr "Tailscale"
     if _vpnii_tailscale_active; then
       local ts_ip ts_account
