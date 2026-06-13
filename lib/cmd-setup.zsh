@@ -98,10 +98,11 @@ _setup_one() {
   fi
 }
 
-# Strips hooks in-place via a $TMPDIR scratch file. No disk backup is
-# retained — config values (PrivateKey, Endpoint, …) never leave
-# /etc/wireguard. The strip is deterministic and transactional: if
-# _strip_to_file fails (set -e aborts), the original is untouched.
+# Strips hooks in-place, atomically. The cleaned copy is written to a scratch
+# file in the SAME directory, then rename()d over the original — a same-fs
+# rename is atomic, so a crash mid-strip leaves either the old file or the new
+# one intact, never a truncated config. No disk backup is retained: config
+# values (PrivateKey, Endpoint, …) never leave the config's own directory.
 _strip_hooks() {
   local conf="$1"
   if [[ ! -w "$conf" ]]; then
@@ -109,10 +110,29 @@ _strip_hooks() {
     return 1
   fi
 
-  local tmpfile
-  tmpfile=$(mktemp)
-  _strip_to_file "$conf" "$tmpfile"
-  cp "$tmpfile" "$conf"
-  rm -f "$tmpfile"
+  # Prefer an atomic same-dir scratch + rename: a crash can't truncate the
+  # config that way. If the directory isn't writable — e.g. a user-owned file
+  # still sitting in a root-owned /etc/wireguard — fall back to a $TMPDIR
+  # scratch + copy. That's non-atomic but matches the pre-atomic behavior,
+  # which only required the file (not its directory) to be writable. umask 077
+  # keeps either scratch at 0600; the dotfile name stays out of `*.conf` globs.
+  local dir tmpfile atomic=1
+  dir="${conf:h}"
+  tmpfile=$(mktemp "${dir}/.vpnii-strip.XXXXXX" 2>/dev/null) || {
+    atomic=0
+    tmpfile=$(mktemp) || { _err "cannot create a scratch file"; return 1; }
+  }
+  # Clean up the scratch if the strip itself fails, so a failure never leaves
+  # a .vpnii-strip.* file behind next to the config.
+  _strip_to_file "$conf" "$tmpfile" || {
+    rm -f "$tmpfile"; _err "strip failed — config left untouched"; return 1
+  }
+  chmod 600 "$tmpfile"
+  if (( atomic )); then
+    mv -f "$tmpfile" "$conf"
+  else
+    cp "$tmpfile" "$conf"
+    rm -f "$tmpfile"
+  fi
   _ok "stripped (no backup retained)"
 }

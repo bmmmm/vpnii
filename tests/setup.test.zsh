@@ -96,4 +96,26 @@ exit_code=$?
 assert_eq "$exit_code" "0" "setup missing-among-others: still exits 0"
 assert_contains "$output" "skipping" "setup missing: warns + skips"
 
+# 7. Strip falls back when the config's directory isn't writable (user-owned
+# file in a root-owned-style dir). Atomic same-dir mktemp fails; the $TMPDIR +
+# cp fallback must still strip. chmod the dir read-only with the file writable.
+rodir="${tmpdir}/rodir"
+mkdir -p "$rodir"
+cp "$hooked_conf" "${rodir}/ro.conf"
+chmod 600 "${rodir}/ro.conf"
+chmod 500 "$rodir"
+output=$("$VPNII" setup -y "${rodir}/ro.conf" 2>&1 < /dev/null)
+exit_code=$?
+strip_ok=1
+grep -qE 'vpnii(-state)?' "${rodir}/ro.conf" 2>/dev/null && strip_ok=0
+chmod 700 "$rodir"   # restore so the rm -rf below can clean up
+assert_eq "$exit_code" "0" "setup -y dir-readonly: exits 0 (fallback strip)"
+assert_contains "$output" "stripped" "setup -y dir-readonly: reports strip"
+if (( strip_ok )); then
+  (( PASS++ )); printf '  \033[0;32m✓\033[0m setup -y dir-readonly: hooks removed via fallback\n'
+else
+  (( FAIL++ )); FAILED_TESTS+=("setup -y dir-readonly: hooks removed via fallback")
+  printf '  \033[0;31m✗\033[0m setup -y dir-readonly: hooks removed via fallback\n'
+fi
+
 rm -rf "$stubdir" "$tmpdir"
