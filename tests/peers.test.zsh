@@ -48,6 +48,22 @@ assert_contains "$output" "2m 0s ago" "two peers: handshake age formatted"
 assert_contains "$output" "1.2.3.4:51820" "two peers: endpoint"
 assert_contains "$output" "never" "two peers: never-handshake shown"
 assert_contains "$output" "—" "two peers: missing endpoint shown as dash"
+# Byte columns use float math + printf %f. tx=2048 → "2.0KB" (↑), rx=1024 →
+# "1.0KB" (↓). Asserting the dot decimal pins the format against a comma-locale.
+assert_contains "$output" "2.0KB" "two peers: tx bytes humanized (dot decimal)"
+assert_contains "$output" "1.0KB" "two peers: rx bytes humanized (dot decimal)"
+
+# Same call under a comma-decimal locale must still print a dot. _human_bytes
+# pins LC_ALL=C locally; LC_ALL outranks LC_NUMERIC, so exercise the stronger
+# LC_ALL case — the one a global LC_NUMERIC=C export would have missed.
+output=$(LC_ALL=de_DE.UTF-8 "$VPNII" peers HomeLab 2>&1)
+assert_contains "$output" "2.0KB" "two peers: comma LC_ALL still dot (pinned in _human_bytes)"
+if [[ "$output" != *"2,0KB"* ]]; then
+  (( PASS++ )); printf '  \033[0;32m✓\033[0m two peers: no comma decimal leaked\n'
+else
+  (( FAIL++ )); FAILED_TESTS+=("two peers: no comma decimal leaked")
+  printf '  \033[0;31m✗\033[0m two peers: no comma decimal leaked\n'
+fi
 
 # 2. wg show needs sudo → friendly error.
 make_wg_stub sudo-needed

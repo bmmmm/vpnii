@@ -11,7 +11,11 @@
 # Human-readable bytes. zsh integer division loses precision for the
 # fractional cases; we use float arithmetic and printf %.1f.
 _human_bytes() {
-  local b="$1"
+  # Pin C numeric formatting locally so printf %f always emits a dot — even if
+  # the caller exported LC_ALL, which outranks LC_NUMERIC. The output is pure
+  # ASCII (digits + B/KB/MB/GB), so forcing the whole category to C here has no
+  # effect beyond the decimal separator.
+  local b="$1" LC_ALL=C
   if (( b < 1024 ));            then printf '%dB'    "$b"
   elif (( b < 1048576 ));       then printf '%.1fKB' "$((b / 1024.0))"
   elif (( b < 1073741824 ));    then printf '%.1fMB' "$((b / 1048576.0))"
