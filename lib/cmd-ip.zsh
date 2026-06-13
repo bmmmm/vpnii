@@ -23,28 +23,40 @@ _cmd_ip() {
 
   command -v dig &>/dev/null || _die "dig not found  (BIND tools ship with macOS — PATH issue?)"
 
-  local rectype="A"
-  (( family == 6 )) && rectype="AAAA"
-
-  # Each entry: resolver:hostname:qtype. OpenDNS returns plain A/AAAA;
-  # Cloudflare and Google return the IP wrapped in a TXT record (quoted).
-  # We strip quotes and whitespace uniformly so callers don't care.
-  local -a sources=(
-    "resolver1.opendns.com:myip.opendns.com:${rectype}"
-    "1.1.1.1:whoami.cloudflare:TXT"
-    "ns1.google.com:o-o.myaddr.l.google.com:TXT"
-  )
+  # Resolvers are addressed by IP, not hostname, so this still works when the
+  # system resolver is broken — which is exactly when you reach for `vpnii ip`
+  # (sanity check right after a tunnel comes up or down). v4 and v6 transports
+  # need a resolver address of the matching family, so the set is picked per
+  # `family`. Fields are space-separated because v6 literals contain colons:
+  #   <resolver-ip> <query-host> <qtype> <label>
+  # OpenDNS answers with a plain A/AAAA; Cloudflare and Google wrap the IP in
+  # a quoted TXT record — quotes/whitespace are stripped uniformly below.
+  local -a sources
+  if (( family == 6 )); then
+    sources=(
+      "2620:119:35::35 myip.opendns.com AAAA OpenDNS"
+      "2606:4700:4700::1111 whoami.cloudflare TXT Cloudflare"
+      "2001:4860:4802:32::a o-o.myaddr.l.google.com TXT Google"
+    )
+  else
+    sources=(
+      "208.67.222.222 myip.opendns.com A OpenDNS"
+      "1.1.1.1 whoami.cloudflare TXT Cloudflare"
+      "216.239.32.10 o-o.myaddr.l.google.com TXT Google"
+    )
+  fi
 
   # `|| ip=""` swallows non-zero from dig + pipefail propagation under
   # `set -euo pipefail` — otherwise a failing first source aborts the
   # whole script before we can try the next one.
-  local entry resolver host qtype ip
+  local entry resolver host qtype label ip
   for entry in "${sources[@]}"; do
-    IFS=: read -r resolver host qtype <<<"$entry"
+    local -a parts=(${=entry})
+    resolver="${parts[1]}" host="${parts[2]}" qtype="${parts[3]}" label="${parts[4]}"
     ip=$(dig "+short" "+time=3" "+tries=1" "-${family}" "$qtype" "$host" "@${resolver}" 2>/dev/null \
       | tr -d '"\r\n ') || ip=""
     if [[ -n "$ip" ]]; then
-      printf '%s  (via %s)\n' "$ip" "$resolver"
+      printf '%s  (via %s)\n' "$ip" "$label"
       return 0
     fi
   done
