@@ -75,7 +75,10 @@ case "$mode" in
   bypass)
     if [ "$server" = "system" ]; then echo "1.2.3.4"; else echo "0.0.0.0"; fi ;;
   unreach)
-    if [ "$server" = "system" ]; then echo "5.6.7.8"; fi ;;  # direct empty
+    # Pi-hole unreachable: real dig exits 9 (no reply) for the @pihole query,
+    # while the system resolver still answers. The non-zero exit is the whole
+    # point — it must not abort `vpnii dns home` under `set -euo pipefail`.
+    if [ "$server" = "system" ]; then echo "5.6.7.8"; else exit 9; fi ;;
 esac
 EOF
 sed -i.bak "s|DIG_MODE_FILE|${tmpdir}/dig_mode|" "${stubdir}/dig" && rm -f "${stubdir}/dig.bak"
@@ -186,9 +189,14 @@ output=$("$VPNII" dns home 2>&1)
 assert_contains "$output" "macOS bypasses it" "adblock: bypass detected"
 echo blocked > "${tmpdir}/dig_mode"
 
-# 11. Pi-hole unreachable: hint about LAN/down.
+# 11. Pi-hole unreachable: real dig exits non-zero for the @pihole probe.
+# That must NOT abort `dns home` under set -e — otherwise the "unreachable"
+# branch is dead code and the cache flush never runs. The exit-0 assertion
+# is the actual regression guard.
 echo unreach > "${tmpdir}/dig_mode"
 output=$("$VPNII" dns home 2>&1)
+exit_code=$?
+assert_eq "$exit_code" "0" "adblock unreachable: command completes (no set -e abort)"
 assert_contains "$output" "Pi-hole" "adblock: unreachable warns"
 assert_contains "$output" "unreachable" "adblock: unreachable named"
 

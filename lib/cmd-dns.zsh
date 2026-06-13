@@ -121,10 +121,15 @@ _dns_test_adblock() {
   # bin/vpnii's `set -e`, because the expression's value is the *pre*-
   # increment number — when var is 0 that's a falsy zero and zsh returns
   # exit 1. Use explicit assignment to keep the exit status truthy.
+  # `|| var=""` swallows dig's non-zero exit (9 = no reply) propagated by
+  # pipefail under `set -euo pipefail`. Without it, an unreachable Pi-hole
+  # aborts the whole command mid-loop — before the `unreach_direct == total`
+  # branch below can report "Pi-hole unreachable", which is exactly the case
+  # this test is meant to surface. Same guard `vpnii ip` already uses.
   local d direct system
   for d in "${probes[@]}"; do
-    direct=$(dig +short +time=2 +tries=1 "$d" "@${pihole_ip}" 2>/dev/null | head -1)
-    system=$(dig +short +time=2 +tries=1 "$d" 2>/dev/null | head -1)
+    direct=$(dig +short +time=2 +tries=1 "$d" "@${pihole_ip}" 2>/dev/null | head -1) || direct=""
+    system=$(dig +short +time=2 +tries=1 "$d" 2>/dev/null | head -1) || system=""
     if [[ "$direct" == "0.0.0.0" ]]; then
       hits_direct=$(( hits_direct + 1 ))
     elif [[ -z "$direct" ]]; then
