@@ -5,6 +5,11 @@
 # falling back to manual cache markers (under VPNII_CACHE_DIR) for VPN
 # clients that aren't wg-quick (Passepartout, IKEv2, etc.).
 
+# Internal flag: toggle/reconnect set this around their _cmd_up call so the
+# brand-new-marker confirmation (see _cmd_up) is skipped for a tunnel they have
+# already established is known — only a direct `vpnii up <typo>` should prompt.
+typeset -g _VPNII_UP_NO_CONFIRM=0
+
 # Returns 0 if the config's [Peer] AllowedIPs covers the default route
 # (0.0.0.0/0 or ::/0). Used by _cmd_up to detect "two full-tunnels at
 # once" conflicts where both want to own the default route.
@@ -82,8 +87,19 @@ _cmd_up() {
     return
   fi
 
-  # Otherwise: manual cache state for non-wg-quick VPN clients.
+  # Otherwise: manual cache state for non-wg-quick VPN clients (Passepartout,
+  # IKEv2, etc.). A brand-new name with neither a wg-quick .conf nor an existing
+  # marker is indistinguishable from a typo — both the CLI arg and the picker
+  # accept free-typed names — so confirm before creating the marker, else a typo
+  # silently spawns a phantom "active" tunnel. Re-marking a known tunnel stays
+  # silent (idempotent); toggle/reconnect skip the prompt via _VPNII_UP_NO_CONFIRM.
   mkdir -p "$VPNII_CACHE_DIR"
+  if [[ "$_VPNII_UP_NO_CONFIRM" != 1 && ! -e "${VPNII_CACHE_DIR}/${name}" ]]; then
+    _warn "no wg-quick config: /etc/wireguard/${name}.conf"
+    if ! _ask "Create an external-client cache marker for '${name}'?"; then
+      _die "aborted — typo? run 'vpnii up' with no args to pick a known tunnel"
+    fi
+  fi
   touch "${VPNII_CACHE_DIR}/${name}"
   _ok "marked active in cache: $name"
 }
@@ -189,7 +205,7 @@ _cmd_toggle() {
   if [[ -f "${VPNII_WG_DIR}/${name}.name" || -f "${VPNII_CACHE_DIR}/${name}" ]]; then
     _cmd_down "$name"
   else
-    _cmd_up "$name"
+    _VPNII_UP_NO_CONFIRM=1 _cmd_up "$name"
   fi
 }
 
@@ -211,5 +227,5 @@ _cmd_reconnect() {
   _info "reconnect: down then up"
   _cmd_down "$name" || true
   printf '\n'
-  _cmd_up "$name"
+  _VPNII_UP_NO_CONFIRM=1 _cmd_up "$name"
 }

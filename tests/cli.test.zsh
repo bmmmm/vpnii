@@ -56,4 +56,21 @@ assert_contains "$output" "invalid tunnel name" "up: rejects path traversal"
 output=$("$VPNII" up ".hidden" 2>&1) || true
 assert_contains "$output" "invalid tunnel name" "up: rejects leading dot"
 
+# up with a brand-new name (no .conf, no existing marker) must confirm before
+# creating a cache marker — a typo otherwise spawns a phantom "active" tunnel
+# (issue #3). </dev/null forces _ask's no-tty path → returns no → aborts.
+output=$("$VPNII" up zz-typo-nonexistent </dev/null 2>&1) || true
+assert_contains "$output" "no wg-quick config" "up new name: warns there is no config"
+if [[ ! -e "${VPNII_CACHE_DIR}/zz-typo-nonexistent" ]]; then
+  (( PASS++ )); printf '  \033[0;32m✓\033[0m up new name: no phantom marker created\n'
+else
+  (( FAIL++ )); FAILED_TESTS+=("up new name: no phantom marker created")
+  printf '  \033[0;31m✗\033[0m up new name: no phantom marker created\n'
+fi
+
+# Re-marking an EXISTING cache tunnel stays silent (Passepartout flow intact).
+touch "${VPNII_CACHE_DIR}/known-ext"
+output=$("$VPNII" up known-ext </dev/null 2>&1)
+assert_contains "$output" "marked active in cache: known-ext" "up existing marker: silent re-mark"
+
 rm -rf "$tmpdir"
