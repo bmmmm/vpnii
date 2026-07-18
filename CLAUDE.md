@@ -24,5 +24,6 @@ See `~/ops/runbooks/identity-setup.md`.
 - Syntax check: `zsh -n bin/vpnii lib/*.zsh`
 - Run the CLI directly: `bin/vpnii <command>` — see `bin/vpnii help`
 - Install / uninstall: `./install.sh` / `./uninstall.sh`
-- CI runs the suite + `shellcheck scripts/*.sh` + a TODO/FIXME marker gate
-  (`.forgejo/workflows/ci.yml`)
+- CI runs the suite + `shellcheck scripts/*.sh` + a TODO/FIXME marker gate,
+  on both Forgejo (`.forgejo/workflows/ci.yml`, mirror-gate) and GitHub
+  (`.github/workflows/ci.yml`, mirror-side, ubuntu-latest)

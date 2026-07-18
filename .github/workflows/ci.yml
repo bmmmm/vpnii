@@ -1,0 +1,70 @@
+name: CI
+
+# GitHub mirror of the Forgejo mirror-gate CI (.forgejo/workflows/ci.yml).
+# Runs on GitHub's free ubuntu-latest runner. The test suite is a custom
+# zsh runner (tests/run.zsh), not bats — every system binary it exercises
+# (route, networksetup, dig, ifconfig, sudo, wg-quick, tailscale) is
+# stubbed, so it has no macOS dependency.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Install zsh
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qq -y zsh
+
+      - name: Run test suite
+        run: tests/run.zsh
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      # install.sh / uninstall.sh and lib/*.zsh are zsh, not POSIX/bash —
+      # shellcheck refuses zsh shebangs. Only scripts/*.sh ships with a
+      # #!/bin/bash shebang, so that's the only dir scanned.
+      - name: Lint bash scripts
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: "./scripts"
+
+  todo-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      # Refuse merges that leave TODO/FIXME/XXX markers in code. The
+      # explicit char-class boundaries are portable across BSD and GNU
+      # grep (avoiding `\b`, which BSD grep doesn't support, and
+      # `[[:<:]]`, which GNU grep doesn't support). Test fixtures with
+      # literal `XXXXYYYY` base64-shaped strings don't trip it because
+      # they're surrounded by word chars on at least one side.
+      - name: Refuse TODO/FIXME/XXX markers
+        run: |
+          set -e
+          if grep -rEn '(^|[^A-Za-z0-9_])(TODO|FIXME|XXX)([^A-Za-z0-9_]|$)' \
+            bin/ lib/ scripts/ install.sh uninstall.sh tests/*.zsh; then
+            echo "::error::Unfinished work markers above — finish or remove before merging."
+            exit 1
+          fi
+          echo "Clean — no TODO/FIXME/XXX markers in code."
